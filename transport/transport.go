@@ -4,9 +4,8 @@ import (
 	"strings"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
-	eiot "github.com/njones/socketio/engineio/transport"
-
 	eess "github.com/njones/socketio/engineio/session"
+	eiot "github.com/njones/socketio/engineio/transport"
 	siop "github.com/njones/socketio/protocol"
 	sess "github.com/njones/socketio/session"
 )

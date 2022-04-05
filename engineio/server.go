@@ -8,14 +8,8 @@ import (
 	eiot "github.com/njones/socketio/engineio/transport"
 )
 
-var (
-	ckHandshakePackets ctxKey = "/// handshake-packets ///"
-)
-
 type (
 	SessionID = sess.ID
-
-	ctxKey string
 
 	EIOVersionStr string
 	EIOVersionInt int

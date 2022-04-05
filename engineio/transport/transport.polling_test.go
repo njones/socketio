@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"reflect"
 	"testing"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"sync"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPollingTransportReceive(t *testing.T) {
@@ -53,17 +53,13 @@ func TestPollingTransportReceive(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			err := tr.Run(w, r)
-			if err != nil {
-				t.Error(err)
-			}
+			assert.NoError(t, err)
 			q.Wait()
 
 			have := <-h
 			want := test.packet
 
-			if !reflect.DeepEqual(have, want) {
-				t2.Errorf("have: %v want: %v", have, want)
-			}
+			assert.Equal(t, want, have)
 		})
 
 		// Send Test
@@ -74,16 +70,12 @@ func TestPollingTransportReceive(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			err := tr.Run(w, r)
-			if err != nil {
-				t.Error(err)
-			}
+			assert.NoError(t, err)
 
 			have := w.Body.String()
 			want := test.data
 
-			if have != want {
-				t2.Errorf("have: %q want: %q", have, want)
-			}
+			assert.Equal(t, want, have)
 		})
 	}
 }

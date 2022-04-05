@@ -36,5 +36,5 @@ func (m *sessionMap) Get(sessionID SessionID) (eiot.Transporter, error) {
 		return tr, nil
 	}
 
-	return nil, ErrNoSessionID.F("the sessionID to transport map")
+	return nil, ErrNoSessionID
 }

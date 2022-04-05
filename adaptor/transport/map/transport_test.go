@@ -3,6 +3,7 @@ package tmap_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	eiot "github.com/njones/socketio/engineio/transport"
 	siop "github.com/njones/socketio/protocol"
 	sess "github.com/njones/socketio/session"
+	"github.com/njones/socketio/transport"
 )
 
 func TestMapTransport(t *testing.T) {
@@ -31,22 +33,33 @@ func TestMapTransport(t *testing.T) {
 	}
 
 	sid, err := str.Add(etr)
-	t.Error(sid, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
+	errch := make(chan error, 1)
 	rec := httptest.NewRecorder()
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		req, _ := http.NewRequest("GET", "/", nil)
-		err := etr.Run(rec, req)
-		t.Log(err)
+		errch <- etr.Run(rec, req)
 	}()
 
 	str.Send(sid, "This is cool")
 	wg.Wait()
 
-	t.Error(rec.Body.String())
+	if err := <-errch; err != nil {
+		t.Fatal(err)
+	}
+
+	have := rec.Body.String()
+	want := `16:40"This is cool"`
+
+	if have != want {
+		t.Fatalf("have: %q want: %q", have, want)
+	}
 }
 
 func TestMapTransportBackwards(t *testing.T) {
@@ -65,19 +78,36 @@ func TestMapTransportBackwards(t *testing.T) {
 	}
 
 	sid, err := str.Add(etr)
-	t.Error(sid, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
+	errch := make(chan error, 1)
 	rec := httptest.NewRecorder()
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		req, _ := http.NewRequest("POST", "/", strings.NewReader(`16:40"This is cool"`))
-		err := etr.Run(rec, req)
-		t.Log(err)
+		errch <- etr.Run(rec, req)
 	}()
 	wg.Wait()
 
-	k := <-str.Receive(sid)
-	t.Errorf("%#v %#v", k, *k.Data.(*string))
+	if err := <-errch; err != nil {
+		t.Fatal(err)
+	}
+
+	data := "This is cool"
+
+	have := <-str.Receive(sid)
+	want := transport.Socket{
+		Type:      byte(eiop.OpenPacket),
+		Namespace: "/",
+		AckID:     0x0,
+		Data:      &data,
+	}
+
+	if !reflect.DeepEqual(have, want) {
+		t.Fatalf("have: %#v want: %#v", have, want)
+	}
 }

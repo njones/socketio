@@ -25,7 +25,7 @@ func NewServerV2(opts ...Option) *ServerV2 {
 
 func (v2 *ServerV2) new(opts ...Option) Server {
 	v2.prev = (&ServerV1{}).new(opts...).(*ServerV1)
-	v2.onConnect = make(map[Namespace]EventCallbackV2)
+	v2.onConnect = make(map[Namespace]OnConnectCbV2)
 	v2.doBinaryEventPacket = doBinaryEventPacket(v2)
 
 	v1 := v2.prev
@@ -35,6 +35,7 @@ func (v2 *ServerV2) new(opts ...Option) Server {
 	v1.eio = eio.NewServerV3(eio.WithPath(*v1.path)).(eio.EIOServer) // v2 uses the default engineio protocol v3
 	v1.transport = tmap.NewMapTransport(siop.NewPacketV2)            // v2 uses the default socketio protocol v3
 
+	v2.inSocketV2.prev = v1.inSocketV1
 	v1.With(v2, opts...)
 
 	return v2

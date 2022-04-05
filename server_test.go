@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type mesg struct {
@@ -31,14 +33,10 @@ func connect(t *testing.T, svr *httptest.Server, numSvrs int, ver, tspType strin
 		url := fmt.Sprintf("%s/socket.io/?EIO=%s&transport=%s&t=%d&name=%s&con=%d", svr.URL, ver, tspType, time.Now().UnixNano(), strings.TrimPrefix(t.Name(), "TestServerV1Basic"), i)
 
 		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		res, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(res.Body)
@@ -52,9 +50,8 @@ func connect(t *testing.T, svr *httptest.Server, numSvrs int, ver, tspType strin
 			e = strings.Index(str, "}") + 1
 		)
 
-		if err := json.Unmarshal([]byte(str[s:e]), &m); err != nil {
-			t.Fatal(err)
-		}
+		err = json.Unmarshal([]byte(str[s:e]), &m)
+		assert.NoError(t, err)
 
 		sids[i] = m["sid"].(string)
 	}
@@ -79,26 +76,24 @@ func testMessage(t *testing.T, svr *httptest.Server, ver string, sids []string, 
 	}
 
 	req, err := http.NewRequest(msg.method, url, body)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	res, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(res.Body)
-	if err := res.Body.Close(); err != nil {
-		t.Fatal(err)
-	}
 
-	if res.StatusCode != 200 {
+	err = res.Body.Close()
+	assert.NoError(t, err)
 
-		t.Error(buf.String())
-		t.Fatal("bad status code:", res.StatusCode)
-	}
+	assert.Condition(
+		t,
+		assert.Comparison(func() bool {
+			return res.StatusCode >= 200 && res.StatusCode < 300
+		}),
+		fmt.Sprintf("bad status code - have: %s", buf.String()),
+	)
 
 	if strings.ToUpper(msg.method) == "GET" {
 		if buf.String() != msg.data {
@@ -116,17 +111,12 @@ func disconnect(t *testing.T, svr *httptest.Server, ver string, sids []string) {
 		url := fmt.Sprintf("%s/socket.io/?EIO=%s&sid=%s&t=%d&disconnect=true", svr.URL, ver, sid, time.Now().UnixNano())
 
 		req, err := http.NewRequest("POST", url, strings.NewReader("2:41"))
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		res, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.NoError(t, err)
 
 		if res.StatusCode != 200 {
-
 			t.Error("disconnect..")
 			t.Fatal("bad status code:", res.StatusCode)
 		}

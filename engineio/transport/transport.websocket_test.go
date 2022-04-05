@@ -11,6 +11,7 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	eiop "github.com/njones/socketio/engineio/protocol"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestWebsocketTransportReceive(t *testing.T) {
@@ -39,29 +40,23 @@ func TestWebsocketTransportReceive(t *testing.T) {
 	wsConn, _, _, err := ws.Dial(context.TODO(), wsURL+"/engine.io")
 	wai.Done()
 
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	ping, err := wsutil.ReadServerText(wsConn)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Error("PING", ping)
+	assert.NoError(t, err)
 
 	err = wsutil.WriteClientText(wsConn, append([]byte{'3'}, ping[1:]...))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	err = wsutil.WriteClientText(wsConn, []byte("4Hello"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.NoError(t, err)
 
 	q.Wait()
-	t.Error(<-h)
+
+	have := <-h
+	want := eiop.Packet{T: eiop.MessagePacket, D: "Hello"}
+
+	assert.Equal(t, want, have)
 }
 
 type testRunHandler struct {
@@ -74,5 +69,6 @@ type testRunHandler struct {
 func (h testRunHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = context.WithValue(ctx, serverSetupComplete, h.wait)
-	h.t.Error(h.fn(w, r.WithContext(ctx), h.opts...))
+	err := h.fn(w, r.WithContext(ctx), h.opts...)
+	assert.NoError(h.t, err)
 }

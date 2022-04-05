@@ -1,3 +1,5 @@
+//go:build gc || (eio_pac_v2 && eio_pac_v3)
+
 package protocol
 
 import (

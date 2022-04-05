@@ -8,7 +8,7 @@ import (
 	siot "github.com/njones/socketio/transport"
 )
 
-type EventCallbackV1 func(*SocketV1) error
+type OnConnectCbV1 func(*SocketV1) error
 
 var v1ProtectedEventName = map[Event]struct{}{
 	"connect":           {},
@@ -40,8 +40,8 @@ type inSocketV1 struct {
 	tr    func() siot.Transporter
 	cmprs func() io.Writer
 
-	events    map[Namespace]map[Event]EventCallback
-	onConnect map[Namespace]EventCallbackV1
+	events    map[Namespace]map[Event]EventCb
+	onConnect map[Namespace]OnConnectCbV1
 }
 
 func (v1 *inSocketV1) delIDs()                    { v1.id = v1.id[:0] }
@@ -62,15 +62,16 @@ func (v1 inSocketV1) nsp() Namespace {
 }
 
 func (v1 *inSocketV1) clone() inSocketV1 {
+	// v1.events and v1.onConnect are initialized in the NewServerV1 method
 	rtn := *v1
 	return rtn
 }
 
-func (v1 inSocketV1) OnConnect(callback EventCallbackV1) { v1.onConnect[v1.nsp()] = callback }
+func (v1 inSocketV1) OnConnect(callback OnConnectCbV1) { v1.onConnect[v1.nsp()] = callback }
 
-func (v1 inSocketV1) OnDisconnect(callback EventCallback) { v1.on("disconnect", callback) }
+func (v1 inSocketV1) OnDisconnect(callback EventCb) { v1.on("disconnect", callback) }
 
-func (v1 inSocketV1) On(event Event, callback EventCallback) {
+func (v1 inSocketV1) On(event Event, callback EventCb) {
 	if _, ok := v1ProtectedEventName[event]; ok {
 		v1.on(event, CallbackErrorWrap(func() error { return ErrInvalidEventName.F(event) }))
 		return
@@ -78,9 +79,9 @@ func (v1 inSocketV1) On(event Event, callback EventCallback) {
 	v1.on(event, callback)
 }
 
-func (v1 inSocketV1) on(event Event, callback EventCallback) {
+func (v1 inSocketV1) on(event Event, callback EventCb) {
 	if _, ok := v1.events[v1.nsp()]; !ok {
-		v1.events[v1.nsp()] = make(map[string]EventCallback)
+		v1.events[v1.nsp()] = make(map[string]EventCb)
 	}
 	v1.events[v1.nsp()][event] = callback
 }
@@ -110,10 +111,6 @@ func (v1 inSocketV1) To(room Room) InToEmit {
 func (v1 inSocketV1) Emit(event Event, data ...Data) error {
 	transp := v1.tr().(siot.Emitter)
 	ids := make(map[SocketID]struct{})
-
-	// for _, id := range transp.AllSocketIDs(v1.nsp()) {
-	// 	ids[id] = struct{}{}
-	// }
 
 	for _, id := range transp.Sockets(v1.nsp()).IDs() {
 		ids[id] = struct{}{}
@@ -148,7 +145,7 @@ func (v1 inSocketV1) emit(event Event, data ...Data) error {
 
 	// last := len(data) - 1
 
-	// if callback, ok := data[last].(EventCallback); ok {
+	// if callback, ok := data[last].(EventCb); ok {
 	// 	v1.on(fmt.Sprintf("%s%d", ackIDEventPrefix, transport.AckID()), callback)
 	// }
 

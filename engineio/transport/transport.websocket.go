@@ -204,8 +204,6 @@ func (t *WebsocketTransport) outgoing(r *http.Request) error {
 	}
 }
 
-type deflateOption func()
-
 func WithPerMessageDeflate(kind HTTPCompressionKind) Option {
 	return func(t Transporter) {
 		switch v := t.(type) {

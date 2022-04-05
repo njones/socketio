@@ -45,8 +45,8 @@ func (v1 *ServerV1) new(opts ...Option) Server {
 
 	v1.ns = "/"
 	v1.path = amp("/socket.io/")
-	v1.events = make(map[Namespace]map[Event]EventCallback)
-	v1.onConnect = make(map[Namespace]EventCallbackV1)
+	v1.events = make(map[Namespace]map[Event]EventCb)
+	v1.onConnect = make(map[Namespace]OnConnectCbV1)
 
 	v1.eio = eio.NewServerV2(eio.WithPath(*v1.path)).(eio.EIOServer)
 	v1.transport = tmap.NewMapTransport(siop.NewPacketV2) // set the default transport

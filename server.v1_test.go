@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/njones/socketio"
+	"github.com/stretchr/testify/assert"
 )
 
 var onConnect = func(t *testing.T, callbacksComplete *sync.WaitGroup) socketio.Server {
@@ -117,22 +118,15 @@ var onConnectEmitAckDefaultWrap = func(t *testing.T, callbacksComplete *sync.Wai
 				return func(val, oop string) error {
 					callbacksComplete.Done()
 
-					if val != "answer" {
-						t.Errorf("have: %q want: %q", val, "answer")
-					}
-
-					if oop != "answer123" {
-						t.Errorf("have: %q want: %q", val, "answer123")
-					}
+					assert.Equal(t, "answer", val)
+					assert.Equal(t, "answer123", oop)
 
 					return nil
 				}
 			},
 		})
 
-		if err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, err)
 
 		return nil
 	})
@@ -179,14 +173,14 @@ var onConnectEmitAckDefaultWrapWithBin = func(t *testing.T, callbacksComplete *s
 				callbacksComplete.Done()
 
 				b, err := io.ReadAll(data)
-				if err != nil {
-					t.Error(err)
+				if assert.NoError(t, err) {
 					return err
 				}
 
-				if strings.ToLower(hex.EncodeToString(b)) != "616e7377657220313233" {
-					t.Errorf("have: %q want: %q", strings.ToLower(hex.EncodeToString(b)), "616e7377657220313233")
-				}
+				have := strings.ToLower(hex.EncodeToString(b))
+				want := "616e7377657220313233"
+
+				assert.Equal(t, want, have)
 
 				return nil
 			}

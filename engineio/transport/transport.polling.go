@@ -4,18 +4,22 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
+	"golang.org/x/text/transform"
 )
 
 type handlerWithError func(http.ResponseWriter, *http.Request) error
 
 type PollingTransport struct {
 	*Transport
+
 	interval time.Duration
 
 	compress func(handlerWithError) handlerWithError
@@ -64,9 +68,10 @@ func (t *PollingTransport) Run(_w http.ResponseWriter, r *http.Request, opts ...
 
 	switch r.Method {
 	case http.MethodGet:
-		return t.compress(t.poll)(w, r.WithContext(ctx))
+		return t.compress(jsonp(t.poll))(w, r.WithContext(ctx))
 	case http.MethodPost:
-		return t.emit(w, r.WithContext(ctx)) // go auto decompression gzipped bodies
+		// decompression will happen automatically
+		return t.emit(w, r.WithContext(ctx))
 	}
 	return nil
 
@@ -162,5 +167,51 @@ func WithHTTPCompression(kind HTTPCompressionKind) Option {
 		default:
 			// show log of no compression used...
 		}
+	}
+}
+
+type jsonpResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (jp jsonpResponseWriter) Write(p []byte) (n int, err error) { return jp.Writer.Write(p) }
+
+type stringify struct{ buf string }
+
+func (s *stringify) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err error) {
+	q := strconv.Quote(string(src))
+	nDst = copy(dst, s.buf+q)
+	nSrc = nDst - len(s.buf)
+	s.buf = q[nSrc:]
+
+	if atEOF {
+		err = io.EOF
+	}
+
+	return
+}
+
+func (s *stringify) Reset() { s.buf = s.buf[:0] }
+
+func jsonp(next handlerWithError) handlerWithError {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		var j *string
+		if j = jsonpFrom(r); j == nil {
+			return next(w, r)
+		}
+
+		jw := transform.NewWriter(w, &stringify{})
+
+		w.Header().Set("Content-type", "application/json")
+		fmt.Fprintf(w, `___eio[%s]("`, *j)
+
+		if err := next(jsonpResponseWriter{Writer: jw, ResponseWriter: w}, r); err != nil {
+			return err
+		}
+
+		fmt.Fprint(w, `");`)
+
+		return nil
 	}
 }

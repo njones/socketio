@@ -1,7 +1,13 @@
+//go:build gc || (eio_svr_v2 && eio_svr_v3 && eio_svr_v4 && eio_svr_v5)
+// +build gc eio_svr_v2,eio_svr_v3,eio_svr_v4,eio_svr_v5
+
 package engineio
 
 //
+// https://github.com/socketio/engine.io-protocol/tree/v2
 // https://github.com/socketio/engine.io/tree/1.8.x
+// https://github.com/socketio/engine.io/tree/2.1.x
+// https://github.com/socketio/engine.io/compare/1.8.x...2.1.x
 //
 
 import (
@@ -25,16 +31,19 @@ type serverV2 struct {
 	allowUpgrades     bool
 	pingTimeout       time.Duration
 	upgradeTimeout    time.Duration
-	maxHTTPBufferSize int64
+	maxHttpBufferSize int
 	cookie            struct {
 		name     string
 		path     string
 		httpOnly bool
 	}
+	initialPacket func() eiop.Packet
 
 	generateID func() SessionID
 
 	codec eiot.Codec
+
+	eto []eiot.Option
 
 	servers    map[EIOVersionStr]server
 	sessions   mapSessionToTransport
@@ -44,10 +53,15 @@ type serverV2 struct {
 func NewServerV2(opts ...Option) Server { return (&serverV2{}).new(opts...) }
 
 func (v2 *serverV2) new(opts ...Option) *serverV2 {
-	v2.generateID = sess.GenerateID
-
 	v2.path = amp("/engine.io")
+	v2.allowUpgrades = true
+	v2.pingTimeout = 60000 * time.Millisecond
+	v2.upgradeTimeout = 10000 * time.Millisecond
+	v2.maxHttpBufferSize = 10e7
 
+	v2.eto = append(v2.eto, eiot.WithPingTimeout(v2.pingTimeout))
+
+	v2.generateID = sess.GenerateID
 	v2.codec = eiot.Codec{
 		PacketEncoder:  eiop.NewPacketEncoderV2,
 		PacketDecoder:  eiop.NewPacketDecoderV2,
@@ -76,7 +90,7 @@ func (v2 *serverV2) With(svr Server, opts ...Option) {
 func (v2 *serverV2) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot.Transporter, error) {
 	if v2.path == nil || !strings.HasPrefix(r.URL.Path, *v2.path) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return nil, ErrBadPath
+		return nil, ErrURIPath
 	}
 
 	sessionID := sessionIDFrom(r)
@@ -89,7 +103,7 @@ func (v2 *serverV2) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot
 		return nil, err
 	}
 
-	go func() { transport.Run(w, r) }()
+	go func() { transport.Run(w, r, v2.eto...) }()
 
 	return transport, nil
 }
@@ -98,6 +112,15 @@ func (v2 *serverV2) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if v2.path == nil || !strings.HasPrefix(r.URL.Path, *v2.path) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
+	}
+
+	if v2.cookie.name != "" {
+		cookie := http.Cookie{
+			Name:     v2.cookie.name,
+			Path:     v2.cookie.path,
+			HttpOnly: v2.cookie.httpOnly,
+		}
+		r.AddCookie(&cookie)
 	}
 
 	eioVersion := eioVersionFrom(r)
@@ -112,6 +135,16 @@ func (v2 *serverV2) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (v2 *serverV2) serveHTTP(w http.ResponseWriter, r *http.Request) error {
+	if origin := r.Header.Get("Origin"); origin != "" {
+		// Automatically add a CORS header
+		if strings.EqualFold(origin, r.URL.Host) {
+			w.Header().Set("Access-Control-Allow-Origin", r.URL.Host)
+		}
+	}
+	if strings.ToUpper(r.Method) == "OPTIONS" {
+		return nil
+	}
+
 	sessionID := sessionIDFrom(r)
 
 	if sessionID == "" {
@@ -137,7 +170,7 @@ func (v2 *serverV2) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err = transport.Run(w, r); err != nil {
-		return ErrOnTransportRun.F(err)
+		return ErrTransportRun.F(err)
 	}
 
 	return err
@@ -157,8 +190,8 @@ func (v2 *serverV2) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 	}
 
 	packets := []eiop.Packet{handshakePacket}
-	if xPackets, ok := r.Context().Value(ckHandshakePackets).([]eiop.Packet); ok {
-		packets = append(packets, xPackets...)
+	if v2.initialPacket != nil {
+		packets = append(packets, v2.initialPacket())
 	}
 
 	transportFunc, ok := v2.transports[transportName]

@@ -1,14 +1,23 @@
+//go:build gc || (eio_svr_v3 && eio_svr_v4 && eio_svr_v5)
+// +build gc eio_svr_v3,eio_svr_v4,eio_svr_v5
+
 package engineio
 
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
 	eiot "github.com/njones/socketio/engineio/transport"
 )
+
+// https://github.com/socketio/engine.io/tree/3.1.x
+// https://github.com/socketio/engine.io/tree/3.4.x
+// https://github.com/socketio/engine.io/tree/3.5.x
+// https://github.com/socketio/engine.io/compare/2.1.x...3.4.x
 
 const Version3 EIOVersionStr = "3"
 
@@ -17,20 +26,8 @@ func init() { registery[Version3.Int()] = NewServerV3 }
 type serverV3 struct {
 	*serverV2
 
-	pingInterval   time.Duration
-	upgradeTimeout time.Duration
-	// cookie struct { // configuration of the cookie that contains the client sid to send as part of handshake response headers.
-	//                 // This cookie might be used for sticky-session. Defaults to not sending any cookie (false).
-	//  domain   string
-	//  encode   func(string) string // Specifies a function that will be used to encode a cookie's value. Since value of a cookie has a limited character set (and must be a simple string), this function can be used to encode a value into a string suited for a cookie's value.
-	//  expires  time.Time  // Specifies the Date object to be the value for the Expires Set-Cookie attribute. By default, no expiration is set
-	//  httpOnly bool
-	//  maxAge   int
-	//  path     string
-	//  sameSite string
-	//  secure   bool
-	// }
-	cors struct { // the options that will be forwarded to the cors module. Defaults to no CORS allowed.
+	pingInterval time.Duration
+	cors         struct { // the options that will be forwarded to the cors module. Defaults to no CORS allowed.
 		enable               bool
 		origin               []string
 		methods              []string
@@ -38,7 +35,6 @@ type serverV3 struct {
 		headersExpose        []string
 		credentials          bool
 		maxAge               int
-		preflightContinue    bool
 		optionsSuccessStatus int
 	}
 }
@@ -47,6 +43,11 @@ func NewServerV3(opts ...Option) Server { return (&serverV3{}).new(opts...) }
 
 func (v3 *serverV3) new(opts ...Option) *serverV3 {
 	v3.serverV2 = (&serverV2{}).new(opts...)
+
+	v3.pingTimeout = 5000 * time.Millisecond
+	v3.pingInterval = 25000 * time.Millisecond
+
+	v3.eto = append(v3.eto, eiot.WithPingInterval(v3.pingInterval))
 
 	v3.codec = eiot.Codec{
 		PacketEncoder:  eiop.NewPacketEncoderV3,
@@ -60,6 +61,44 @@ func (v3 *serverV3) new(opts ...Option) *serverV3 {
 }
 
 func (v3 *serverV3) serveHTTP(w http.ResponseWriter, r *http.Request) error {
+	if origin := r.Header.Get("Origin"); origin != "" && v3.cors.enable {
+		if v3.cors.credentials {
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+		for _, origin := range v3.cors.origin {
+			// match the incoming domain, as per the request
+			if origin == "*" {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				break
+			}
+			if strings.EqualFold(origin, r.URL.Host) {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				break
+			}
+		}
+		if len(v3.cors.methods) > 0 {
+			methods := strings.ToUpper(strings.Join(v3.cors.methods, ", "))
+			w.Header().Set("Access-Control-Allow-Methods", methods)
+		}
+		if len(v3.cors.headersAllow) > 0 {
+			headersAllow := strings.Join(v3.cors.headersAllow, ", ")
+			w.Header().Set("Access-Control-Allow-Headers", headersAllow)
+		}
+		if len(v3.cors.headersExpose) > 0 {
+			headersExpose := strings.Join(v3.cors.headersExpose, ", ")
+			w.Header().Set("Access-Control-Expose-Headers", headersExpose)
+		}
+		if v3.cors.maxAge > 0 {
+			w.Header().Set("Access-Control-Expose-Headers", strconv.Itoa(v3.cors.maxAge))
+		}
+		if v3.cors.optionsSuccessStatus > 0 {
+			w.WriteHeader(v3.cors.optionsSuccessStatus)
+		}
+	}
+	if strings.ToUpper(r.Method) == "OPTIONS" {
+		return nil
+	}
+
 	sessionID := sessionIDFrom(r)
 
 	if sessionID == "" {
@@ -85,7 +124,7 @@ func (v3 *serverV3) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err = transport.Run(w, r); err != nil {
-		return ErrOnTransportRun.F(err)
+		return ErrTransportRun.F(err)
 	}
 
 	return err
@@ -108,8 +147,8 @@ func (v3 *serverV3) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 	}
 
 	packets := []eiop.Packet{handshakePacket}
-	if xPackets, ok := r.Context().Value(ckHandshakePackets).([]eiop.Packet); ok {
-		packets = append(packets, xPackets...)
+	if v3.initialPacket != nil {
+		packets = append(packets, v3.initialPacket())
 	}
 
 	transportFunc, ok := v3.transports[transportName]
@@ -131,7 +170,7 @@ func (v3 *serverV3) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 func (v3 *serverV3) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot.Transporter, error) {
 	if v3.path == nil || !strings.HasPrefix(r.URL.Path, *v3.path) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return nil, ErrBadPath
+		return nil, ErrURIPath
 	}
 
 	sessionID := sessionIDFrom(r)

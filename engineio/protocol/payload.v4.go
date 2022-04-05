@@ -1,3 +1,6 @@
+//go:build gc || eio_pay_v4
+// +build gc eio_pay_v4
+
 package protocol
 
 import (

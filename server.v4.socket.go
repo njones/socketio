@@ -3,7 +3,7 @@ package socketio
 import siot "github.com/njones/socketio/transport"
 
 type inSocketV4 struct {
-	onConnect map[Namespace]EventCallbackV4
+	onConnect map[Namespace]OnConnectCbV4
 
 	prev inSocketV3
 }
@@ -27,12 +27,12 @@ func (v4 *inSocketV4) setCompress_(compress bool) { v4.prev.setCompress_(compres
 
 func (v4 inSocketV4) nsp() Namespace { return v4.prev.nsp() }
 
-func (v4 inSocketV4) OnConnect(callback EventCallbackV4) {
+func (v4 inSocketV4) OnConnect(callback OnConnectCbV4) {
 	v4.onConnect[v4.nsp()] = callback
 }
-func (v4 inSocketV4) OnDisconnect(callback EventCallback) { v4.prev.OnDisconnect(callback) }
+func (v4 inSocketV4) OnDisconnect(callback EventCb) { v4.prev.OnDisconnect(callback) }
 
-func (v4 inSocketV4) On(event Event, callback EventCallback) { v4.prev.On(event, callback) }
+func (v4 inSocketV4) On(event Event, callback EventCb) { v4.prev.On(event, callback) }
 
 // Of - sending to all clients in namespace, including sender
 func (v4 inSocketV4) Of(namespace Namespace) inSocketV4 {
@@ -58,7 +58,7 @@ func (v4 inSocketV4) To(room Room) InToEmit {
 // Emit - sending to all connected clients
 func (v4 inSocketV4) Emit(event Event, data ...Data) error { return v4.prev.Emit(event, data...) }
 
-type EventCallbackV4 func(*SocketV4) error
+type OnConnectCbV4 func(*SocketV4) error
 
 type SocketV4 struct {
 	inSocketV4
@@ -67,7 +67,7 @@ type SocketV4 struct {
 	req *Request
 }
 
-func (v4 *SocketV4) tr() siot.Transporter { return v4.prev.prev.prev.tr() }
+func (v4 *SocketV4) tr() siot.Transporter { v1 := v4.prev.prev.prev; return v1.tr() }
 
 func (v4 *SocketV4) Emit(event Event, data ...Data) error { return v4.prev.Emit(event, data...) }
 

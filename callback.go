@@ -5,7 +5,7 @@ import (
 	"reflect"
 )
 
-type EventCallback interface {
+type EventCb interface {
 	Callback(...interface{}) error
 }
 

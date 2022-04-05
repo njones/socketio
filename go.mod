@@ -2,39 +2,20 @@ module github.com/njones/socketio
 
 go 1.17
 
-require github.com/njones/socketio/adaptor/transport/map v0.0.0
-
-require github.com/njones/socketio/engineio/transport v0.0.0 // indirect
-
-require github.com/njones/socketio/engineio/session v0.0.0 // indirect
-
 require (
-	github.com/klauspost/compress v1.10.3 // indirect
-	github.com/njones/socketio/engineio/protocol v0.0.0 // indirect
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
-	nhooyr.io/websocket v1.8.7 // indirect
+	github.com/gobwas/ws v1.1.0
+	github.com/stretchr/testify v1.7.1
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/text v0.3.7
+	nhooyr.io/websocket v1.8.7
 )
 
-require github.com/njones/socketio/transport v0.0.0
-
-require github.com/njones/socketio/protocol v0.0.0
-
-require github.com/njones/socketio/engineio v0.0.0
-
-require github.com/njones/socketio/session v0.0.0
-
-replace github.com/njones/socketio/engineio => ./engineio
-
-replace github.com/njones/socketio/adaptor/transport/map => ./adaptor/transport/map
-
-replace github.com/njones/socketio/engineio/transport => ./engineio/transport
-
-replace github.com/njones/socketio/engineio/session => ./engineio/session
-
-replace github.com/njones/socketio/engineio/protocol => ./engineio/protocol
-
-replace github.com/njones/socketio/transport => ./transport
-
-replace github.com/njones/socketio/protocol => ./protocol
-
-replace github.com/njones/socketio/session => ./session
+require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/gobwas/httphead v0.1.0 // indirect
+	github.com/gobwas/pool v0.2.1 // indirect
+	github.com/klauspost/compress v1.10.3 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	golang.org/x/sys v0.0.0-20201207223542-d4d67f95c62d // indirect
+	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
+)
