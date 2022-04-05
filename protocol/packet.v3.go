@@ -12,9 +12,7 @@ var _ Packet = &PacketV3{}
 
 type PacketV3 struct {
 	packet
-
-	incoming binaryStreamIn  `json:"-"`
-	outgoing binaryStreamOut `json:"-"`
+	packetBinary
 
 	scratch `json:"-"` // holds buffers and such for writing out the wire format
 }

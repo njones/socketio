@@ -209,7 +209,20 @@ func TestPacketV3Write(ext *testing.T) {
 				{1, 2, 3},
 			},
 			want: want{
-				pac: PacketV3{packet: packet{Type: BinaryEventPacket, Namespace: packetNS("/"), Data: &packetDataArray{x: []interface{}{"hello", io.Reader(nil)}}}, incoming: binaryStreamIn{func(io.Reader) error { return nil }}},
+				pac: PacketV3{
+					packet: packet{
+						Type:      BinaryEventPacket,
+						Namespace: packetNS("/"),
+						Data: &packetDataArray{
+							x: []interface{}{
+								"hello", io.Reader(nil),
+							},
+						},
+					},
+					packetBinary: packetBinary{
+						incoming: binaryStreamIn{func(io.Reader) error { return nil }},
+					},
+				},
 				n:   42,
 				err: nil,
 			},
@@ -221,7 +234,18 @@ func TestPacketV3Write(ext *testing.T) {
 				{1, 2, 3},
 			},
 			want: want{
-				pac: PacketV3{packet: packet{Type: BinaryEventPacket, AckID: 456, Namespace: packetNS("/admin"), Data: &packetDataArray{x: []interface{}{"hello", io.Reader(nil)}}}, incoming: binaryStreamIn{func(io.Reader) error { return nil }}},
+				pac: PacketV3{
+					packet: packet{
+						Type:      BinaryEventPacket,
+						AckID:     456,
+						Namespace: packetNS("/admin"),
+						Data: &packetDataArray{
+							x: []interface{}{"hello", io.Reader(nil)}},
+					},
+					packetBinary: packetBinary{
+						incoming: binaryStreamIn{func(io.Reader) error { return nil }},
+					},
+				},
 				n:   52,
 				err: nil,
 			},

@@ -24,7 +24,7 @@ type (
 
 // Server is the generic interface that's used to designate the socketID as a server
 // so that it can be added to a http.Server instance.
-type Server interface {
+type Server = interface {
 	ServeHTTP(http.ResponseWriter, *http.Request)
 }
 

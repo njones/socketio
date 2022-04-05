@@ -15,11 +15,14 @@ const (
 
 var _ Packet = &PacketV2{}
 
-type PacketV2 struct {
-	packet
-
+type packetBinary struct {
 	incoming binaryStreamIn  `json:"-"`
 	outgoing binaryStreamOut `json:"-"`
+}
+
+type PacketV2 struct {
+	packet
+	packetBinary
 
 	// scratch - holds buffers and such for reading and writing out the wire format
 	scratch `json:"-"`

@@ -16,7 +16,7 @@ func (cb callbackTest1) Callback(v ...interface{}) error {
 // options. This is to make sure that we have good valid defaults.
 func TestNewServer(t *testing.T) {
 
-	// svr := socketio.NewServer()
+	//svr := socketio.NewServer(eio.WithPingInterval(10 * time.Second))
 
 	// var cb callbackTest1 = func(a string, b string) error {
 	// 	return nil

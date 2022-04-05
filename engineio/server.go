@@ -22,7 +22,7 @@ type server interface {
 	serveHTTP(http.ResponseWriter, *http.Request) error
 }
 
-type Server interface {
+type Server = interface {
 	ServeHTTP(http.ResponseWriter, *http.Request)
 }
 

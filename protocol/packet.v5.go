@@ -34,9 +34,7 @@ var _ Packet = &PacketV5{}
 
 type PacketV5 struct {
 	packet
-
-	incoming binaryStreamIn  `json:"-"`
-	outgoing binaryStreamOut `json:"-"`
+	packetBinary
 
 	scratch `json:"-"` // holds buffers and such for writing out the wire format
 }
