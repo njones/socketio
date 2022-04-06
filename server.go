@@ -29,6 +29,10 @@ type Server = interface {
 	ServeHTTP(http.ResponseWriter, *http.Request)
 }
 
+type eventCallback interface {
+	Callback(...interface{}) error
+}
+
 // inToEmit is an interface used to limit the next chained method to In, To or Emit
 type inToEmit interface {
 	In(room Room) inToEmit

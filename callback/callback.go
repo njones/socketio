@@ -1,4 +1,4 @@
-package socketio
+package callback
 
 import (
 	"errors"
@@ -7,26 +7,22 @@ import (
 	seri "github.com/njones/socketio/serialize"
 )
 
-type eventCallback interface {
-	Callback(...interface{}) error
-}
+type ErrorWrap func() error
 
-type CallbackErrorWrap func() error
-
-func (fn CallbackErrorWrap) Callback(data ...interface{}) error { return fn() }
-func (CallbackErrorWrap) Serialize() (string, error) {
+func (fn ErrorWrap) Callback(data ...interface{}) error { return fn() }
+func (ErrorWrap) Serialize() (string, error) {
 	return "", ErrStubSerialize
 }
-func (CallbackErrorWrap) Unserialize(string) error {
+func (ErrorWrap) Unserialize(string) error {
 	return ErrStubUnserialize
 }
 
-type CallbackWrap struct {
+type Wrap struct {
 	Func       func() interface{} // func([T]...) error
 	Parameters []seri.Serializable
 }
 
-func (fn CallbackWrap) Callback(data ...interface{}) (err error) {
+func (fn Wrap) Callback(data ...interface{}) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			switch e := r.(type) {
@@ -79,9 +75,9 @@ func (fn CallbackWrap) Callback(data ...interface{}) (err error) {
 	return nil
 }
 
-func (CallbackWrap) Serialize() (string, error) {
+func (Wrap) Serialize() (string, error) {
 	return "", ErrStubSerialize
 }
-func (CallbackWrap) Unserialize(string) error {
+func (Wrap) Unserialize(string) error {
 	return ErrStubUnserialize
 }

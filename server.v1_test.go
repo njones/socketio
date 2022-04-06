@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/njones/socketio"
+	"github.com/njones/socketio/callback"
 	"github.com/njones/socketio/serialize"
 	"github.com/stretchr/testify/assert"
 )
@@ -113,7 +114,7 @@ var onConnectEmitAckDefaultWrap = func(t *testing.T, callbacksComplete *sync.Wai
 		defer callbacksComplete.Done()
 
 		callbacksComplete.Add(1)
-		err := socket.Emit("question", serialize.String("do you think so?"), socketio.CallbackWrap{
+		err := socket.Emit("question", serialize.String("do you think so?"), callback.Wrap{
 			Parameters: []serialize.Serializable{serialize.Str, serialize.Str},
 			Func: func() interface{} {
 				return func(val, oop string) error {
@@ -167,7 +168,7 @@ var onConnectEmitAckDefaultWrapWithBin = func(t *testing.T, callbacksComplete *s
 
 	callbacksComplete.Add(1)
 
-	v1.On("hello", socketio.CallbackWrap{
+	v1.On("hello", callback.Wrap{
 		Parameters: []serialize.Serializable{serialize.Bin},
 		Func: func() interface{} {
 			return func(data io.Reader) error {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	cabk "github.com/njones/socketio/callback"
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
 )
@@ -73,7 +74,7 @@ func (v1 inSocketV1) OnDisconnect(callback eventCallback) { v1.on("disconnect", 
 
 func (v1 inSocketV1) On(event Event, callback eventCallback) {
 	if _, ok := v1ProtectedEventName[event]; ok {
-		v1.on(event, CallbackErrorWrap(func() error { return ErrInvalidEventName.F(event) }))
+		v1.on(event, cabk.ErrorWrap(func() error { return ErrInvalidEventName.F(event) }))
 		return
 	}
 	v1.on(event, callback)
