@@ -8,7 +8,7 @@ import (
 	siot "github.com/njones/socketio/transport"
 )
 
-type OnConnectCbV1 func(*SocketV1) error
+type onConnectCallbackVersion1 = func(*SocketV1) error
 
 var v1ProtectedEventName = map[Event]struct{}{
 	"connect":           {},
@@ -41,7 +41,7 @@ type inSocketV1 struct {
 	cmprs func() io.Writer
 
 	events    map[Namespace]map[Event]EventCb
-	onConnect map[Namespace]OnConnectCbV1
+	onConnect map[Namespace]onConnectCallbackVersion1
 }
 
 func (v1 *inSocketV1) delIDs()                    { v1.id = v1.id[:0] }
@@ -67,7 +67,7 @@ func (v1 *inSocketV1) clone() inSocketV1 {
 	return rtn
 }
 
-func (v1 inSocketV1) OnConnect(callback OnConnectCbV1) { v1.onConnect[v1.nsp()] = callback }
+func (v1 inSocketV1) OnConnect(callback onConnectCallbackVersion1) { v1.onConnect[v1.nsp()] = callback }
 
 func (v1 inSocketV1) OnDisconnect(callback EventCb) { v1.on("disconnect", callback) }
 

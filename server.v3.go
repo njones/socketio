@@ -27,7 +27,7 @@ func NewServerV3(opts ...Option) *ServerV3 {
 
 func (v3 *ServerV3) new(opts ...Option) Server {
 	v3.prev = (&ServerV2{}).new(opts...).(*ServerV2)
-	v3.onConnect = make(map[Namespace]OnConnectCbV3)
+	v3.onConnect = make(map[Namespace]onConnectCallbackVersion3)
 	// v3.doBinaryEventPacket = doBinaryEventPacket(v3)
 	// v3.doConnectPacket = doConnectPacketV2(v3)
 

@@ -3,7 +3,7 @@ package socketio
 import siot "github.com/njones/socketio/transport"
 
 type inSocketV4 struct {
-	onConnect map[Namespace]OnConnectCbV4
+	onConnect map[Namespace]onConnectCallbackVersion4
 
 	prev inSocketV3
 }
@@ -27,7 +27,7 @@ func (v4 *inSocketV4) setCompress_(compress bool) { v4.prev.setCompress_(compres
 
 func (v4 inSocketV4) nsp() Namespace { return v4.prev.nsp() }
 
-func (v4 inSocketV4) OnConnect(callback OnConnectCbV4) {
+func (v4 inSocketV4) OnConnect(callback onConnectCallbackVersion4) {
 	v4.onConnect[v4.nsp()] = callback
 }
 func (v4 inSocketV4) OnDisconnect(callback EventCb) { v4.prev.OnDisconnect(callback) }
@@ -58,7 +58,7 @@ func (v4 inSocketV4) To(room Room) InToEmit {
 // Emit - sending to all connected clients
 func (v4 inSocketV4) Emit(event Event, data ...Data) error { return v4.prev.Emit(event, data...) }
 
-type OnConnectCbV4 func(*SocketV4) error
+type onConnectCallbackVersion4 = func(*SocketV4) error
 
 type SocketV4 struct {
 	inSocketV4

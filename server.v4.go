@@ -24,7 +24,7 @@ func NewServerV4(opts ...Option) *ServerV4 {
 
 func (v4 *ServerV4) new(opts ...Option) Server {
 	v4.prev = (&ServerV3{}).new(opts...).(*ServerV3)
-	v4.onConnect = make(map[Namespace]OnConnectCbV4)
+	v4.onConnect = make(map[Namespace]onConnectCallbackVersion4)
 
 	v3 := v4.prev
 	v2 := v3.prev
