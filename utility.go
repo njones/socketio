@@ -1,5 +1,7 @@
 package socketio
 
+import seri "github.com/njones/socketio/serialize"
+
 func amp(s string) *string { return &s }
 
 func stoi(s []string) []interface{} {
@@ -12,9 +14,9 @@ func stoi(s []string) []interface{} {
 
 func boolIs(a, b bool) bool { return !(a == b && !a) } // 0 == 0 && 0 then false... otherwise true
 
-func serviceError(err error) []interface{} { return []interface{}{Error(err)} }
+func serviceError(err error) []interface{} { return []interface{}{seri.Error(err)} }
 
-func scrub(strOnly bool, event Event, data []Serializable) (out interface{}, cb EventCb, err error) {
+func scrub(strOnly bool, event Event, data []seri.Serializable) (out interface{}, cb EventCb, err error) {
 	if strOnly {
 		rtn := make([]string, len(data)+1)
 		rtn[0] = event

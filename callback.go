@@ -3,6 +3,8 @@ package socketio
 import (
 	"errors"
 	"reflect"
+
+	seri "github.com/njones/socketio/serialize"
 )
 
 type EventCb interface {
@@ -21,7 +23,7 @@ func (CallbackErrorWrap) Unserialize(string) error {
 
 type CallbackWrap struct {
 	Func       func() interface{} // func([T]...) error
-	Parameters []Serializable
+	Parameters []seri.Serializable
 }
 
 func (fn CallbackWrap) Callback(data ...interface{}) (err error) {

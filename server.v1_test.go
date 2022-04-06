@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/njones/socketio"
+	"github.com/njones/socketio/serialize"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,7 +32,7 @@ var onConnectSocketEmit = func(t *testing.T, callbacksComplete *sync.WaitGroup) 
 	v1.OnConnect(func(socket *socketio.SocketV1) error {
 		defer callbacksComplete.Done()
 
-		socket.Emit("hello", socketio.String("can you hear me?"), socketio.Int(1), socketio.Int(2), socketio.String("abc"))
+		socket.Emit("hello", serialize.String("can you hear me?"), serialize.Int(1), serialize.Int(2), serialize.String("abc"))
 		return nil
 	})
 	return v1
@@ -44,7 +45,7 @@ var onConnectBroadcastEmit = func(t *testing.T, callbacksComplete *sync.WaitGrou
 	v1.OnConnect(func(socket *socketio.SocketV1) error {
 		defer callbacksComplete.Done()
 
-		socket.Broadcast().Emit("hello", socketio.String("hello friends!"))
+		socket.Broadcast().Emit("hello", serialize.String("hello friends!"))
 		return nil
 	})
 	return v1
@@ -64,7 +65,7 @@ var onConnectRoomEmit = func(numCallbacks int) func(*testing.T, *sync.WaitGroup)
 			}
 
 			if cntCallbacks == (numCallbacks - 1) {
-				socket.To("game").Emit("nice game", socketio.String("let's play a game"))
+				socket.To("game").Emit("nice game", serialize.String("let's play a game"))
 			}
 
 			cntCallbacks++
@@ -93,7 +94,7 @@ var onConnectDualRoomEmit = func(numCallbacks int) func(*testing.T, *sync.WaitGr
 			}
 
 			if cntCallbacks == (numCallbacks - 1) {
-				socket.To("game1").To("game2").Emit("nice game", socketio.String("let's play a game (too)"))
+				socket.To("game1").To("game2").Emit("nice game", serialize.String("let's play a game (too)"))
 			}
 
 			cntCallbacks++
@@ -112,8 +113,8 @@ var onConnectEmitAckDefaultWrap = func(t *testing.T, callbacksComplete *sync.Wai
 		defer callbacksComplete.Done()
 
 		callbacksComplete.Add(1)
-		err := socket.Emit("question", socketio.String("do you think so?"), socketio.CallbackWrap{
-			Parameters: []socketio.Serializable{socketio.Str, socketio.Str},
+		err := socket.Emit("question", serialize.String("do you think so?"), socketio.CallbackWrap{
+			Parameters: []serialize.Serializable{serialize.Str, serialize.Str},
 			Func: func() interface{} {
 				return func(val, oop string) error {
 					callbacksComplete.Done()
@@ -150,7 +151,7 @@ var onConnectRoomLeave = func(numCallbacks int) func(*testing.T, *sync.WaitGroup
 			}
 
 			if cntCallbacks == (numCallbacks - 1) {
-				socket.To("game").Emit("nice game", socketio.String("let's play a game"))
+				socket.To("game").Emit("nice game", serialize.String("let's play a game"))
 			}
 
 			cntCallbacks++
@@ -167,7 +168,7 @@ var onConnectEmitAckDefaultWrapWithBin = func(t *testing.T, callbacksComplete *s
 	callbacksComplete.Add(1)
 
 	v1.On("hello", socketio.CallbackWrap{
-		Parameters: []socketio.Serializable{socketio.Bin},
+		Parameters: []serialize.Serializable{serialize.Bin},
 		Func: func() interface{} {
 			return func(data io.Reader) error {
 				callbacksComplete.Done()

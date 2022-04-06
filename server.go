@@ -3,6 +3,7 @@ package socketio
 import (
 	"net/http"
 
+	seri "github.com/njones/socketio/serialize"
 	sess "github.com/njones/socketio/session"
 )
 
@@ -19,7 +20,7 @@ type (
 	Namespace = string
 	Room      = string
 	Event     = string
-	Data      = Serializable
+	Data      = seri.Serializable
 )
 
 // Server is the generic interface that's used to designate the socketID as a server

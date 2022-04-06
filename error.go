@@ -5,9 +5,6 @@ import (
 )
 
 const (
-	ErrSerializeBinary   errs.String = "can not serialize the object, instead %s"
-	ErrUnserializeBinary errs.String = "can not unserialize the object, instead %s"
-
 	ErrBadScrub          errs.String = "bad scrub to string: %w"
 	ErrBadEventName      errs.String = "bad event name: %s"
 	ErrInvalidData       errs.String = "invalid data type: %s"
