@@ -103,7 +103,9 @@ func (v2 *serverV2) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot
 		return nil, err
 	}
 
-	go func() { transport.Run(w, r, v2.eto...) }()
+	go func() {
+		transport.Run(w, r, v2.eto...) // skip this error
+	}()
 
 	return transport, nil
 }

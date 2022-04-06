@@ -1,8 +1,6 @@
 package socketio
 
 import (
-	"fmt"
-
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
 )
@@ -10,7 +8,7 @@ import (
 func runV3(v3 *ServerV3) func(r *Request, socketID siot.SocketID) error {
 	return func(r *Request, socketID siot.SocketID) error {
 		v1 := v3.prev.prev
-	Receive:
+
 		for socket := range v1.transport.Receive(socketID) {
 			switch socket.Type {
 			case siop.ConnectPacket.Byte():
@@ -18,7 +16,7 @@ func runV3(v3 *ServerV3) func(r *Request, socketID siot.SocketID) error {
 					v1.transport.Send(socketID, serviceError(err), siop.WithType(byte(siop.ErrorPacket)))
 				}
 			case siop.DisconnectPacket.Byte():
-				break Receive
+				return nil
 			case siop.EventPacket.Byte():
 				if err := v1.doEventPacket(socket); err != nil {
 					v1.transport.Send(socketID, serviceError(err), siop.WithType(byte(siop.ErrorPacket)))
@@ -35,11 +33,10 @@ func runV3(v3 *ServerV3) func(r *Request, socketID siot.SocketID) error {
 				if err := v3.doBinaryEventPacket(socket); err != nil {
 					v1.transport.Send(socketID, serviceError(err), siop.WithType(byte(siop.ErrorPacket)))
 				}
-			default:
-				return fmt.Errorf("invalid packet type: %#v", socket)
 			}
 		}
-		return nil
+
+		return nil // should never reach here
 	}
 }
 

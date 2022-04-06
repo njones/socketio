@@ -1,12 +1,11 @@
 package transport
 
 import (
-	"testing"
-	"time"
-
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"testing"
+	"time"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
 	"github.com/stretchr/testify/assert"

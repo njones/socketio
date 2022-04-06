@@ -3,7 +3,6 @@ package tmap_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -15,9 +14,12 @@ import (
 	siop "github.com/njones/socketio/protocol"
 	sess "github.com/njones/socketio/session"
 	"github.com/njones/socketio/transport"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestMapTransport(t *testing.T) {
+func TestMapTransportSend(t *testing.T) {
+	sess.GenerateID = func() tmap.SocketID { return tmap.SocketID("ABC123") }
+
 	c := eiot.Codec{
 		PacketEncoder:  eiop.NewPacketEncoderV2,
 		PacketDecoder:  eiop.NewPacketDecoderV2,
@@ -25,44 +27,48 @@ func TestMapTransport(t *testing.T) {
 		PayloadDecoder: eiop.NewPayloadDecoderV2,
 	}
 
-	etr := eiot.NewPollingTransport(10*time.Millisecond)(tmap.SessionID("12345"), c)
-	str := tmap.NewMapTransport(siop.NewPacketV3)
+	wgrp := new(sync.WaitGroup)
 
-	sess.GenerateID = func() tmap.SocketID {
-		return tmap.SocketID("ABC123")
-	}
+	etr := eiot.NewPollingTransport(10*time.Millisecond)(tmap.SessionID("12345"), c)
+	str := tmap.NewMapTransport(siop.NewPacketV2)
 
 	sid, err := str.Add(etr)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	errch := make(chan error, 1)
+	errChan := make(chan error, 1)
 	rec := httptest.NewRecorder()
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
+
+	wgrp.Add(1)
 	go func() {
-		defer wg.Done()
-		req, _ := http.NewRequest("GET", "/", nil)
-		errch <- etr.Run(rec, req)
+		defer wgrp.Done()
+		req, err := http.NewRequest("GET", "/", nil)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		errChan <- etr.Run(rec, req)
 	}()
 
 	str.Send(sid, "This is cool")
-	wg.Wait()
+	wgrp.Wait()
 
-	if err := <-errch; err != nil {
+	if err := <-errChan; err != nil {
 		t.Fatal(err)
 	}
 
 	have := rec.Body.String()
-	want := `16:40"This is cool"`
+	want := thisIsCoolText
 
-	if have != want {
-		t.Fatalf("have: %q want: %q", have, want)
-	}
+	assert.Equal(t, want, have)
 }
 
-func TestMapTransportBackwards(t *testing.T) {
+var thisIsCoolText = `16:40"This is cool"`
+
+func TestMapTransportReceive(t *testing.T) {
+	sess.GenerateID = func() tmap.SocketID { return tmap.SocketID("ABC123") }
+
 	c := eiot.Codec{
 		PacketEncoder:  eiop.NewPacketEncoderV2,
 		PacketDecoder:  eiop.NewPacketDecoderV2,
@@ -70,30 +76,34 @@ func TestMapTransportBackwards(t *testing.T) {
 		PayloadDecoder: eiop.NewPayloadDecoderV2,
 	}
 
-	etr := eiot.NewPollingTransport(10*time.Millisecond)(tmap.SessionID("12345"), c)
-	str := tmap.NewMapTransport(siop.NewPacketV3)
+	wgrp := new(sync.WaitGroup)
 
-	sess.GenerateID = func() tmap.SocketID {
-		return tmap.SocketID("ABC123")
-	}
+	etr := eiot.NewPollingTransport(10*time.Millisecond)(tmap.SessionID("12345"), c)
+	str := tmap.NewMapTransport(siop.NewPacketV2)
 
 	sid, err := str.Add(etr)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	errch := make(chan error, 1)
+	errChan := make(chan error, 1)
 	rec := httptest.NewRecorder()
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		req, _ := http.NewRequest("POST", "/", strings.NewReader(`16:40"This is cool"`))
-		errch <- etr.Run(rec, req)
-	}()
-	wg.Wait()
 
-	if err := <-errch; err != nil {
+	wgrp.Add(1)
+	go func() {
+		defer wgrp.Done()
+
+		req, err := http.NewRequest("POST", "/", strings.NewReader(thisIsCoolText))
+		if err != nil {
+			errChan <- err
+			return
+		}
+
+		errChan <- etr.Run(rec, req)
+	}()
+	wgrp.Wait()
+
+	if err := <-errChan; err != nil {
 		t.Fatal(err)
 	}
 
@@ -107,7 +117,5 @@ func TestMapTransportBackwards(t *testing.T) {
 		Data:      &data,
 	}
 
-	if !reflect.DeepEqual(have, want) {
-		t.Fatalf("have: %#v want: %#v", have, want)
-	}
+	assert.Equal(t, want, have)
 }

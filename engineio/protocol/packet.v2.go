@@ -5,6 +5,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -21,9 +22,12 @@ func (dec *PacketDecoderV2) Decode(packet *PacketV2) error {
 		packet = &PacketV2{}
 	}
 
-	// check if packet is the default...
+	// check if packet is the default type...
 	if packet.T == 0 {
 		if _, err := io.CopyN(&packet.T, dec.r, 1); err != nil {
+			if errors.Is(err, io.EOF) {
+				return err
+			}
 			return ErrPacketDecode.F("v2", err)
 		}
 	}

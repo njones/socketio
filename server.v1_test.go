@@ -290,14 +290,6 @@ func TestServerV1Basic(t *testing.T) {
 				{method: "GET", url: "/socket.io/?${eio}&${sid_3}&${t}", data: ``},
 			},
 		},
-		// {
-		// 	name:   "socket.Event with Binary",
-		// 	server: onConnectEmitAckDefaultWrap,
-		// 	incomingMessages: []mesg{
-		// 		{method: "POST", url: "/socket.io/?${eio}&${sid_0}&${t}", data: `42:51-["hello",{"_placeholder":true,"num":0}]`},
-		// 		{method: "POST", url: "/socket.io/?${eio}&${sid_0}&${t}", data: "\x61\x6e\x73\x77\x65\x72\x20\x31\x32\x33"},
-		// 	},
-		// },
 	}
 
 	for _, test := range tests {
@@ -326,10 +318,3 @@ func TestServerV1Basic(t *testing.T) {
 		})
 	}
 }
-
-/*
-
-The full emit cheatsheet
-AckID from callback function
-
-*/

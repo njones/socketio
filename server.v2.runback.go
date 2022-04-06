@@ -10,7 +10,7 @@ import (
 func runV2(v2 *ServerV2) func(r *Request, socketID siot.SocketID) error {
 	return func(r *Request, socketID siot.SocketID) error {
 		v1 := v2.prev
-	Receive:
+
 		for socket := range v1.transport.Receive(socketID) {
 			switch socket.Type {
 			case siop.ConnectPacket.Byte():
@@ -18,7 +18,7 @@ func runV2(v2 *ServerV2) func(r *Request, socketID siot.SocketID) error {
 					v1.transport.Send(socketID, serviceError(err), siop.WithType(byte(siop.ErrorPacket)))
 				}
 			case siop.DisconnectPacket.Byte():
-				break Receive
+				return nil
 			case siop.EventPacket.Byte():
 				if err := v1.doEventPacket(socket); err != nil {
 					v1.transport.Send(socketID, serviceError(err), siop.WithType(byte(siop.ErrorPacket)))
@@ -35,11 +35,10 @@ func runV2(v2 *ServerV2) func(r *Request, socketID siot.SocketID) error {
 				if err := v2.doBinaryEventPacket(socket); err != nil {
 					v1.transport.Send(socketID, serviceError(err), siop.WithType(byte(siop.ErrorPacket)))
 				}
-			default:
-				return fmt.Errorf("invalid packet type: %#v", socket)
 			}
 		}
-		return nil
+
+		return nil // should never reach here
 	}
 }
 

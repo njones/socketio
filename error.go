@@ -8,10 +8,11 @@ const (
 	ErrSerializeBinary   errs.String = "can not serialize the object, instead %s"
 	ErrUnserializeBinary errs.String = "can not unserialize the object, instead %s"
 
-	ErrBadScrub         errs.String = "bad scrub to string: %w"
-	ErrBadEventName     errs.String = "bad event name: %s"
-	ErrInvalidData      errs.String = "invalid data type: %s"
-	ErrInvalidEventName errs.String = "invalid event name, cannot use the registered name %q"
+	ErrBadScrub          errs.String = "bad scrub to string: %w"
+	ErrBadEventName      errs.String = "bad event name: %s"
+	ErrInvalidData       errs.String = "invalid data type: %s"
+	ErrInvalidEventName  errs.String = "invalid event name, cannot use the registered name %q"
+	ErrInvalidPacketType errs.String = "invalid %s packet type: %#v"
 
 	ErrStubSerialize   errs.String = "no Serialize() is a callback function"
 	ErrStubUnserialize errs.String = "no Unserialize() is a callback function"

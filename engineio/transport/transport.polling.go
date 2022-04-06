@@ -21,6 +21,7 @@ type PollingTransport struct {
 	*Transport
 
 	interval time.Duration
+	sleep    time.Duration
 
 	compress func(handlerWithError) handlerWithError
 }
@@ -41,6 +42,7 @@ func NewPollingTransport(ival time.Duration) func(SessionID, Codec) Transporter 
 				}
 			},
 			interval: ival,
+			sleep:    25 * time.Millisecond,
 		}
 
 		return t
@@ -100,7 +102,7 @@ Write:
 		case <-interval:
 			break Write
 		default:
-			time.Sleep(25 * time.Millisecond) // let other things come in if things are coming quick...
+			time.Sleep(t.sleep) // let other things come in if things are coming quick...
 			if hasPayload && len(t.receive) == 0 {
 				break Write // return if we have something, and nothing is in the pipeline
 			}

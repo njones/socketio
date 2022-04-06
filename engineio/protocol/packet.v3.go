@@ -5,6 +5,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -28,6 +29,9 @@ func (dec *PacketDecoderV3) Decode(packet *PacketV3) error {
 	}
 	if packet.T == 0 {
 		if _, err := io.CopyN(&packet.T, dec.r, 1); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
 			return ErrPacketDecode.F("v3", err)
 		}
 	}

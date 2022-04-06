@@ -13,8 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// sadReader will send an error after
-// the data bytes have been sent
+// sadReader will send an error after the data bytes have been sent
 type sadReadWriter struct {
 	n    int
 	data []byte

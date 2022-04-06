@@ -10,34 +10,41 @@ import (
 func runV1(v1 *ServerV1) func(*Request, siot.SocketID) error {
 	return func(r *Request, socketID siot.SocketID) error {
 
-	Receive:
 		for socket := range v1.transport.Receive(socketID) {
 			switch socket.Type {
 			case siop.ConnectPacket.Byte():
 				if err := v1.doConnectPacket(r, socketID, socket); err != nil {
 					v1.transport.Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+					return err
 				}
 			case siop.DisconnectPacket.Byte():
 				if err := v1.doDisconnectPacket(r, socketID, socket); err != nil {
 					v1.transport.Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+					return err
 				}
-				break Receive
+				return nil
 			case siop.EventPacket.Byte():
 				if err := v1.doEventPacket(socket); err != nil {
 					v1.transport.Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+					return err
 				}
 			case siop.AckPacket.Byte():
 				if err := v1.doAckPacket(socket); err != nil {
+					v1.transport.Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
 					return err
-					// v1.transport.Send(socketID, dataError(err), siot.WithType(siop.ErrorPacket.Byte()))
 				}
 			case siop.ErrorPacket.Byte():
 				if e, ok := socket.Data.(error); ok {
 					return e
 				}
+			default:
+				err := ErrInvalidPacketType.F("v1", socket)
+				v1.transport.Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+				return err
 			}
 		}
-		return nil
+
+		return nil // should never reach here
 	}
 }
 
