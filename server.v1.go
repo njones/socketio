@@ -45,7 +45,7 @@ func (v1 *ServerV1) new(opts ...Option) Server {
 
 	v1.ns = "/"
 	v1.path = amp("/socket.io/")
-	v1.events = make(map[Namespace]map[Event]EventCb)
+	v1.events = make(map[Namespace]map[Event]eventCallback)
 	v1.onConnect = make(map[Namespace]onConnectCallbackVersion1)
 
 	v1.eio = eio.NewServerV2(eio.WithPath(*v1.path)).(eio.EIOServer)

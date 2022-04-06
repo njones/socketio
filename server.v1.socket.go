@@ -29,7 +29,7 @@ var v1ProtectedEventName = map[Event]struct{}{
 }
 
 type inSocketV1 struct {
-	binary, binary_     bool // the _ value is the per message value...
+	binary, binary_     bool // the <name>_ value is the per message value...
 	compress, compress_ bool // https://socket.io/blog/socket-io-1-4-0/
 
 	ns Namespace
@@ -38,9 +38,9 @@ type inSocketV1 struct {
 	to []Room
 
 	tr    func() siot.Transporter
-	cmprs func() io.Writer
+	cmprs func() io.Writer // the compress writer
 
-	events    map[Namespace]map[Event]EventCb
+	events    map[Namespace]map[Event]eventCallback
 	onConnect map[Namespace]onConnectCallbackVersion1
 }
 
@@ -69,9 +69,9 @@ func (v1 *inSocketV1) clone() inSocketV1 {
 
 func (v1 inSocketV1) OnConnect(callback onConnectCallbackVersion1) { v1.onConnect[v1.nsp()] = callback }
 
-func (v1 inSocketV1) OnDisconnect(callback EventCb) { v1.on("disconnect", callback) }
+func (v1 inSocketV1) OnDisconnect(callback eventCallback) { v1.on("disconnect", callback) }
 
-func (v1 inSocketV1) On(event Event, callback EventCb) {
+func (v1 inSocketV1) On(event Event, callback eventCallback) {
 	if _, ok := v1ProtectedEventName[event]; ok {
 		v1.on(event, CallbackErrorWrap(func() error { return ErrInvalidEventName.F(event) }))
 		return
@@ -79,9 +79,9 @@ func (v1 inSocketV1) On(event Event, callback EventCb) {
 	v1.on(event, callback)
 }
 
-func (v1 inSocketV1) on(event Event, callback EventCb) {
+func (v1 inSocketV1) on(event Event, callback eventCallback) {
 	if _, ok := v1.events[v1.nsp()]; !ok {
-		v1.events[v1.nsp()] = make(map[string]EventCb)
+		v1.events[v1.nsp()] = make(map[string]eventCallback)
 	}
 	v1.events[v1.nsp()][event] = callback
 }
@@ -94,14 +94,14 @@ func (v1 inSocketV1) Of(namespace Namespace) inSocketV1 {
 }
 
 // In - sending to all clients in room, including sender
-func (v1 inSocketV1) In(room Room) InToEmit {
+func (v1 inSocketV1) In(room Room) inToEmit {
 	rtn := v1.clone()
 	rtn.addIn(room)
 	return rtn
 }
 
 // To - sending to all clients in room, except sender
-func (v1 inSocketV1) To(room Room) InToEmit {
+func (v1 inSocketV1) To(room Room) inToEmit {
 	rtn := v1.clone()
 	rtn.addTo(room)
 	return rtn
@@ -145,7 +145,7 @@ func (v1 inSocketV1) emit(event Event, data ...Data) error {
 
 	// last := len(data) - 1
 
-	// if callback, ok := data[last].(EventCb); ok {
+	// if callback, ok := data[last].(eventCallback); ok {
 	// 	v1.on(fmt.Sprintf("%s%d", ackIDEventPrefix, transport.AckID()), callback)
 	// }
 
@@ -169,14 +169,14 @@ type SocketV1 struct {
 func (v1 SocketV1) Request() *Request { return v1.req }
 
 // In - sending to all clients in room, including sender
-func (v1 SocketV1) In(room Room) InToEmit {
+func (v1 SocketV1) In(room Room) inToEmit {
 	rtn := v1.clone()
 	rtn.addIn(room)
 	return SocketV1{inSocketV1: rtn, ID: v1.ID, req: v1.req}
 }
 
 // To - sending to all clients in room, except sender
-func (v1 SocketV1) To(room Room) InToEmit {
+func (v1 SocketV1) To(room Room) inToEmit {
 	rtn := v1.clone()
 	rtn.addTo(room)
 	return SocketV1{inSocketV1: rtn, ID: v1.ID, req: v1.req}
@@ -239,7 +239,7 @@ func (v1 SocketV1) Emit(event Event, data ...Data) error {
 	return v1.emit(event, data...)
 }
 
-func (v1 SocketV1) Broadcast() Emit {
+func (v1 SocketV1) Broadcast() emit {
 	transport := v1.tr().(siot.Emitter)
 	ids := make(map[SocketID]struct{})
 
@@ -258,6 +258,6 @@ func (v1 SocketV1) Broadcast() Emit {
 	return v1
 }
 
-func (v1 SocketV1) Volatile() BroadcastEmit              { return v1 } // NOT IMPLEMENTED...
-func (v1 SocketV1) Compress(compress bool) BroadcastEmit { v1.setCompress_(compress); return v1 }
-func (v1 SocketV1) Binary(binary bool) BroadcastEmit     { v1.setBinary_(binary); return v1 }
+func (v1 SocketV1) Volatile() broadcastEmit              { return v1 } // NOT IMPLEMENTED...
+func (v1 SocketV1) Compress(compress bool) broadcastEmit { v1.setCompress_(compress); return v1 }
+func (v1 SocketV1) Binary(binary bool) broadcastEmit     { v1.setBinary_(binary); return v1 }

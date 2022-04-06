@@ -29,20 +29,20 @@ type Server = interface {
 	ServeHTTP(http.ResponseWriter, *http.Request)
 }
 
-// InToEmit is an interface used to limit the next chained method to In, To or Emit
-type InToEmit interface {
-	In(room Room) InToEmit
-	To(room Room) InToEmit
-	Emit
+// inToEmit is an interface used to limit the next chained method to In, To or Emit
+type inToEmit interface {
+	In(room Room) inToEmit
+	To(room Room) inToEmit
+	emit
 }
 
-// BroadcastEmit is an interface used to limit the next chained method to Broadcast or Emit
-type BroadcastEmit interface {
-	Broadcast() Emit
-	Emit
+// broadcastEmit is an interface used to limit the next chained method to Broadcast or Emit
+type broadcastEmit interface {
+	Broadcast() emit
+	emit
 }
 
-// BroadcastEmit is an interface used to limit the next chained method to Emit
-type Emit interface {
+// broadcastEmit is an interface used to limit the next chained method to Emit
+type emit interface {
 	Emit(event Event, data ...Data) error
 }

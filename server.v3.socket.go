@@ -30,9 +30,9 @@ func (v3 inSocketV3) nsp() Namespace { return v3.prev.nsp() }
 func (v3 inSocketV3) OnConnect(callback onConnectCallbackVersion3) {
 	v3.onConnect[v3.nsp()] = callback
 }
-func (v3 inSocketV3) OnDisconnect(callback EventCb) { v3.prev.OnDisconnect(callback) }
+func (v3 inSocketV3) OnDisconnect(callback eventCallback) { v3.prev.OnDisconnect(callback) }
 
-func (v3 inSocketV3) On(event Event, callback EventCb) { v3.prev.On(event, callback) }
+func (v3 inSocketV3) On(event Event, callback eventCallback) { v3.prev.On(event, callback) }
 
 // Of - sending to all clients in namespace, including sender
 func (v3 inSocketV3) Of(namespace Namespace) inSocketV3 {
@@ -42,14 +42,14 @@ func (v3 inSocketV3) Of(namespace Namespace) inSocketV3 {
 }
 
 // In - sending to all clients in room, including sender
-func (v3 inSocketV3) In(room Room) InToEmit {
+func (v3 inSocketV3) In(room Room) inToEmit {
 	rtn := v3.clone()
 	rtn.addIn(room)
 	return rtn
 }
 
 // To - sending to all clients in room, except sender
-func (v3 inSocketV3) To(room Room) InToEmit {
+func (v3 inSocketV3) To(room Room) inToEmit {
 	rtn := v3.clone()
 	rtn.addTo(room)
 	return rtn
@@ -71,7 +71,7 @@ func (v3 *SocketV3) tr() siot.Transporter { v1 := v3.prev.prev; return v1.tr() }
 
 func (v3 *SocketV3) Emit(event Event, data ...Data) error { return v3.prev.Emit(event, data...) }
 
-func (v3 *SocketV3) Broadcast() Emit {
+func (v3 *SocketV3) Broadcast() emit {
 	transp := v3.tr().(siot.Emitter)
 	ids := make(map[siot.SocketID]struct{})
 
@@ -87,6 +87,6 @@ func (v3 *SocketV3) Broadcast() Emit {
 	return v3
 }
 
-func (v3 *SocketV3) Volatile() Emit              { return v3 } // NOT IMPLEMENTED...
-func (v3 *SocketV3) Compress(compress bool) Emit { v3.setCompress_(compress); return v3 }
-func (v3 *SocketV3) Binary(binary bool) Emit     { v3.setBinary_(binary); return v3 }
+func (v3 *SocketV3) Volatile() emit              { return v3 } // NOT IMPLEMENTED...
+func (v3 *SocketV3) Compress(compress bool) emit { v3.setCompress_(compress); return v3 }
+func (v3 *SocketV3) Binary(binary bool) emit     { v3.setBinary_(binary); return v3 }

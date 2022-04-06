@@ -16,12 +16,12 @@ func boolIs(a, b bool) bool { return !(a == b && !a) } // 0 == 0 && 0 then false
 
 func serviceError(err error) []interface{} { return []interface{}{seri.Error(err)} }
 
-func scrub(strOnly bool, event Event, data []seri.Serializable) (out interface{}, cb EventCb, err error) {
+func scrub(strOnly bool, event Event, data []seri.Serializable) (out interface{}, cb eventCallback, err error) {
 	if strOnly {
 		rtn := make([]string, len(data)+1)
 		rtn[0] = event
 		for i, v := range data {
-			if cbv, ok := v.(EventCb); ok && i == len(data)-1 {
+			if cbv, ok := v.(eventCallback); ok && i == len(data)-1 {
 				return rtn[:len(rtn)-1], cbv, nil
 			}
 			rtn[i+1], err = v.Serialize()
@@ -35,7 +35,7 @@ func scrub(strOnly bool, event Event, data []seri.Serializable) (out interface{}
 	rtn := make([]interface{}, len(data)+1)
 	rtn[0] = event
 	for i, v := range data {
-		if cbv, ok := v.(EventCb); ok && i == len(data)-1 {
+		if cbv, ok := v.(eventCallback); ok && i == len(data)-1 {
 			return rtn[:len(rtn)-1], cbv, nil
 		}
 		if vi, ok := v.(ifa); ok {

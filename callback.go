@@ -7,7 +7,7 @@ import (
 	seri "github.com/njones/socketio/serialize"
 )
 
-type EventCb interface {
+type eventCallback interface {
 	Callback(...interface{}) error
 }
 

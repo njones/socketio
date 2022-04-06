@@ -30,9 +30,9 @@ func (v2 inSocketV2) nsp() Namespace { return v2.prev.nsp() }
 func (v2 inSocketV2) OnConnect(callback onConnectCallbackVersion2) {
 	v2.onConnect[v2.nsp()] = callback
 }
-func (v2 inSocketV2) OnDisconnect(callback EventCb) { v2.prev.OnDisconnect(callback) }
+func (v2 inSocketV2) OnDisconnect(callback eventCallback) { v2.prev.OnDisconnect(callback) }
 
-func (v2 inSocketV2) On(event Event, callback EventCb) { v2.prev.On(event, callback) }
+func (v2 inSocketV2) On(event Event, callback eventCallback) { v2.prev.On(event, callback) }
 
 // Of - sending to all clients in namespace, including sender
 func (v2 inSocketV2) Of(namespace Namespace) inSocketV2 {
@@ -42,14 +42,14 @@ func (v2 inSocketV2) Of(namespace Namespace) inSocketV2 {
 }
 
 // In - sending to all clients in room, including sender
-func (v2 inSocketV2) In(room Room) InToEmit {
+func (v2 inSocketV2) In(room Room) inToEmit {
 	rtn := v2.clone()
 	rtn.addIn(room)
 	return rtn
 }
 
 // To - sending to all clients in room, except sender
-func (v2 inSocketV2) To(room Room) InToEmit {
+func (v2 inSocketV2) To(room Room) inToEmit {
 	rtn := v2.clone()
 	rtn.addTo(room)
 	return rtn
@@ -71,7 +71,7 @@ func (v2 *SocketV2) tr() siot.Transporter { v1 := v2.prev; return v1.tr() }
 
 func (v2 *SocketV2) Emit(event Event, data ...Data) error { return v2.prev.Emit(event, data...) }
 
-func (v2 *SocketV2) Broadcast() Emit {
+func (v2 *SocketV2) Broadcast() emit {
 	transp := v2.tr().(siot.Emitter)
 	ids := make(map[siot.SocketID]struct{})
 
@@ -87,6 +87,6 @@ func (v2 *SocketV2) Broadcast() Emit {
 	return v2
 }
 
-func (v2 *SocketV2) Volatile() Emit              { return v2 } // NOT IMPLEMENTED...
-func (v2 *SocketV2) Compress(compress bool) Emit { v2.setCompress_(compress); return v2 }
-func (v2 *SocketV2) Binary(binary bool) Emit     { v2.setBinary_(binary); return v2 }
+func (v2 *SocketV2) Volatile() emit              { return v2 } // NOT IMPLEMENTED...
+func (v2 *SocketV2) Compress(compress bool) emit { v2.setCompress_(compress); return v2 }
+func (v2 *SocketV2) Binary(binary bool) emit     { v2.setBinary_(binary); return v2 }

@@ -30,9 +30,9 @@ func (v4 inSocketV4) nsp() Namespace { return v4.prev.nsp() }
 func (v4 inSocketV4) OnConnect(callback onConnectCallbackVersion4) {
 	v4.onConnect[v4.nsp()] = callback
 }
-func (v4 inSocketV4) OnDisconnect(callback EventCb) { v4.prev.OnDisconnect(callback) }
+func (v4 inSocketV4) OnDisconnect(callback eventCallback) { v4.prev.OnDisconnect(callback) }
 
-func (v4 inSocketV4) On(event Event, callback EventCb) { v4.prev.On(event, callback) }
+func (v4 inSocketV4) On(event Event, callback eventCallback) { v4.prev.On(event, callback) }
 
 // Of - sending to all clients in namespace, including sender
 func (v4 inSocketV4) Of(namespace Namespace) inSocketV4 {
@@ -42,14 +42,14 @@ func (v4 inSocketV4) Of(namespace Namespace) inSocketV4 {
 }
 
 // In - sending to all clients in room, including sender
-func (v4 inSocketV4) In(room Room) InToEmit {
+func (v4 inSocketV4) In(room Room) inToEmit {
 	rtn := v4.clone()
 	rtn.addIn(room)
 	return rtn
 }
 
 // To - sending to all clients in room, except sender
-func (v4 inSocketV4) To(room Room) InToEmit {
+func (v4 inSocketV4) To(room Room) inToEmit {
 	rtn := v4.clone()
 	rtn.addTo(room)
 	return rtn
@@ -71,7 +71,7 @@ func (v4 *SocketV4) tr() siot.Transporter { v1 := v4.prev.prev.prev; return v1.t
 
 func (v4 *SocketV4) Emit(event Event, data ...Data) error { return v4.prev.Emit(event, data...) }
 
-func (v4 *SocketV4) Broadcast() Emit {
+func (v4 *SocketV4) Broadcast() emit {
 	transp := v4.tr().(siot.Emitter)
 	ids := make(map[siot.SocketID]struct{})
 
@@ -87,6 +87,6 @@ func (v4 *SocketV4) Broadcast() Emit {
 	return v4
 }
 
-func (v4 *SocketV4) Volatile() Emit              { return v4 } // NOT IMPLEMENTED...
-func (v4 *SocketV4) Compress(compress bool) Emit { v4.setCompress_(compress); return v4 }
-func (v4 *SocketV4) Binary(binary bool) Emit     { v4.setBinary_(binary); return v4 }
+func (v4 *SocketV4) Volatile() emit              { return v4 } // NOT IMPLEMENTED...
+func (v4 *SocketV4) Compress(compress bool) emit { v4.setCompress_(compress); return v4 }
+func (v4 *SocketV4) Binary(binary bool) emit     { v4.setBinary_(binary); return v4 }
