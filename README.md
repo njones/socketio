@@ -1,4 +1,4 @@
-# socketIO
+# SocketIO [![GoDoc](https://pkg.go.dev/badge/github.com/njones/socketio?utm_source=godoc)](https://pkg.go.dev/github.com/njones/socketio) 
 
 This Go language SocketIO library aims to support all past, current and future versions of the Socket.io (and Engine.io) protocols and servers.
 
@@ -12,7 +12,7 @@ The library currently supports the following versions:
 | v4                 | v5                 |                 |                 |
 |                    | v6                 |                 |                 |
 
-Getting the correct features/protocols/versions included inside which SocketIO and EngineIO Server versions can be confusing at times, therefore some servers may initially be implemented correctly, or not have features implemented. Please open a ticket for any discrepancies. 
+Getting the correct features/protocols/versions included inside which SocketIO and EngineIO Server versions can be confusing at times, therefore some servers may initially be implemented incorrectly, or not have features implemented. Please open a ticket for any discrepancies. 
 
 This library is very new and **we're looking for beta testers.**
 
