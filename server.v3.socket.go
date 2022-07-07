@@ -17,7 +17,6 @@ func (v3 *inSocketV3) clone() inSocketV3 {
 
 func (v3 *inSocketV3) delIDs()                    { v3.prev.delIDs() }
 func (v3 *inSocketV3) addID(id siot.SocketID)     { v3.prev.addID(id) }
-func (v3 *inSocketV3) addIn(room Room)            { v3.prev.addIn(room) }
 func (v3 *inSocketV3) addTo(room Room)            { v3.prev.addTo(room) }
 func (v3 *inSocketV3) setNsp(namespace Namespace) { v3.prev.setNsp(namespace) }
 func (v3 *inSocketV3) setBinary(binary bool)      { v3.prev.setBinary(binary) }
@@ -44,7 +43,7 @@ func (v3 inSocketV3) Of(namespace Namespace) inSocketV3 {
 // In - sending to all clients in room, including sender
 func (v3 inSocketV3) In(room Room) inToEmit {
 	rtn := v3.clone()
-	rtn.addIn(room)
+	rtn.addTo(room) // addIn
 	return rtn
 }
 

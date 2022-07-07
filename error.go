@@ -20,4 +20,6 @@ const (
 	ErrBadParamType        errs.String = "bad type for parameter"
 	ErrInterfaceNotFound   errs.String = "need to have interface for serialize"
 	ErrUnknownPanic        errs.String = "unknown panic"
+
+	ErrBadSendToSocketIndex errs.String = "the index is invalid"
 )

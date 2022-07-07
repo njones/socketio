@@ -97,9 +97,8 @@ func testMessage(t *testing.T, svr *httptest.Server, ver string, sids []string, 
 
 	if strings.ToUpper(msg.method) == "GET" {
 		if buf.String() != msg.data {
-			t.Log((msg.url))
-			t.Log(rep.Replace(msg.url))
-			t.Errorf("[%v] have: %q want: %q", sids, buf.String(), msg.data)
+			t.Log("url:", rep.Replace(msg.url))
+			t.Errorf("have: %q want: %q", buf.String(), msg.data)
 		}
 	}
 }

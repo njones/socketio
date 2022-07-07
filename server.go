@@ -43,6 +43,12 @@ type inToEmit interface {
 	emit
 }
 
+// toEmit is an interface used to limit the next chained method to In, To or Emit
+type toEmit interface {
+	To(room Room) toEmit
+	emit
+}
+
 // broadcastEmit is an interface used to limit the next chained method to Broadcast or Emit
 type broadcastEmit interface {
 	Broadcast() emit

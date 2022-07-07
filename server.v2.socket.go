@@ -3,6 +3,7 @@ package socketio
 import siot "github.com/njones/socketio/transport"
 
 type inSocketV2 struct {
+	_binary   bool
 	onConnect map[Namespace]onConnectCallbackVersion2
 
 	prev inSocketV1
@@ -17,11 +18,10 @@ func (v2 *inSocketV2) clone() inSocketV2 {
 
 func (v2 *inSocketV2) delIDs()                    { v2.prev.delIDs() }
 func (v2 *inSocketV2) addID(id siot.SocketID)     { v2.prev.addID(id) }
-func (v2 *inSocketV2) addIn(room Room)            { v2.prev.addIn(room) }
 func (v2 *inSocketV2) addTo(room Room)            { v2.prev.addTo(room) }
 func (v2 *inSocketV2) setNsp(namespace Namespace) { v2.prev.setNsp(namespace) }
-func (v2 *inSocketV2) setBinary(binary bool)      { v2.prev.setBinary(binary) }
-func (v2 *inSocketV2) setBinary_(binary bool)     { v2.prev.setBinary_(binary) }
+func (v2 *inSocketV2) setBinary(binary bool)      { v2.prev.binary = binary }
+func (v2 *inSocketV2) setBinary_(binary bool)     { v2._binary = binary }
 func (v2 *inSocketV2) setCompress(compress bool)  { v2.prev.setCompress(compress) }
 func (v2 *inSocketV2) setCompress_(compress bool) { v2.prev.setCompress_(compress) }
 
@@ -44,7 +44,7 @@ func (v2 inSocketV2) Of(namespace Namespace) inSocketV2 {
 // In - sending to all clients in room, including sender
 func (v2 inSocketV2) In(room Room) inToEmit {
 	rtn := v2.clone()
-	rtn.addIn(room)
+	rtn.addTo(room) // addIn
 	return rtn
 }
 

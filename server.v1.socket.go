@@ -6,6 +6,7 @@ import (
 
 	cabk "github.com/njones/socketio/callback"
 	siop "github.com/njones/socketio/protocol"
+	"github.com/njones/socketio/session"
 	siot "github.com/njones/socketio/transport"
 )
 
@@ -29,13 +30,22 @@ var v1ProtectedEventName = map[Event]struct{}{
 	"pong":              {},
 }
 
+type inInSocketV1 struct{ inSocketV1 }
+
+func (v1 inInSocketV1) In(room Room) inToEmit { return v1.To(room) }
+
+// With takes in a server version and applies Options to that server object.
+func (v1 *ServerV1) In(room Room) inToEmit { return v1.To(room) }
+
+// the embeded struct that is used to service call of the Server level values
 type inSocketV1 struct {
-	binary, binary_     bool // the <name>_ value is the per message value...
+	binary              bool
 	compress, compress_ bool // https://socket.io/blog/socket-io-1-4-0/
+
+	keepIdx int
 
 	ns Namespace
 	id []SocketID
-	in []Room
 	to []Room
 
 	tr    func() siot.Transporter
@@ -47,11 +57,8 @@ type inSocketV1 struct {
 
 func (v1 *inSocketV1) delIDs()                    { v1.id = v1.id[:0] }
 func (v1 *inSocketV1) addID(id SocketID)          { v1.id = append(v1.id, id) }
-func (v1 *inSocketV1) addIn(room Room)            { v1.in = append(v1.in, room) }
 func (v1 *inSocketV1) addTo(room Room)            { v1.to = append(v1.to, room) }
 func (v1 *inSocketV1) setNsp(namespace Namespace) { v1.ns = namespace }
-func (v1 *inSocketV1) setBinary(binary bool)      { v1.binary = binary }
-func (v1 *inSocketV1) setBinary_(binary bool)     { v1.binary_ = binary }
 func (v1 *inSocketV1) setCompress(compress bool)  { v1.compress = compress }
 func (v1 *inSocketV1) setCompress_(compress bool) { v1.compress_ = compress }
 
@@ -95,46 +102,63 @@ func (v1 inSocketV1) Of(namespace Namespace) inSocketV1 {
 }
 
 // In - sending to all clients in room, including sender
-func (v1 inSocketV1) In(room Room) inToEmit {
-	rtn := v1.clone()
-	rtn.addIn(room)
-	return rtn
-}
-
-// To - sending to all clients in room, except sender
 func (v1 inSocketV1) To(room Room) inToEmit {
+
+	// Check to see if we're going to send to a socket
+	transport := v1.tr().(siot.Emitter)
+	for _, id := range transport.Sockets(v1.nsp()).IDs() {
+		if session.ID(room) == id {
+			rtn := v1.clone()
+			rtn.addID(id)
+			rtn.keepIdx = len(rtn.id) // this will allow skipping in the Emit method
+			return inInSocketV1{rtn}
+		}
+	}
+
 	rtn := v1.clone()
 	rtn.addTo(room)
-	return rtn
+	return inInSocketV1{rtn}
 }
 
 // Emit - sending to all connected clients
 func (v1 inSocketV1) Emit(event Event, data ...Data) error {
-	transp := v1.tr().(siot.Emitter)
-	ids := make(map[SocketID]struct{})
-
-	for _, id := range transp.Sockets(v1.nsp()).IDs() {
-		ids[id] = struct{}{}
+	if len(v1.id) < v1.keepIdx {
+		return ErrBadSendToSocketIndex
 	}
 
-	v1.delIDs()
-	for id := range ids {
-		v1.addID(id)
+	if len(v1.id[v1.keepIdx:]) > 0 {
+		return v1.emit(event, data...)
+	}
+
+	transport := v1.tr().(siot.Emitter)
+
+	if len(v1.id) == 0 && len(v1.to) == 0 {
+		for _, id := range transport.Sockets(v1.nsp()).IDs() {
+			v1.addID(id)
+		}
+		return v1.emit(event, data...)
+	}
+
+	var dedupID = map[session.ID]struct{}{}
+	for _, toRoom := range v1.to {
+		rooms, err := transport.Sockets(v1.nsp()).FromRoom(toRoom)
+		if err != nil {
+			panic(err)
+		}
+
+		for _, id := range rooms {
+			if _, inSet := dedupID[id]; !inSet {
+				v1.addID(id)
+				dedupID[id] = struct{}{}
+			}
+		}
 	}
 
 	return v1.emit(event, data...)
 }
 
 func (v1 inSocketV1) emit(event Event, data ...Data) error {
-	// if !boolIs(v1.binary, v1.binary_) {
-	// 	for _, datum := range data {
-	// 		if _, ok := datum.(io.Reader); ok {
-	// 			return fmt.Errorf("found binary data, only strings expected")
-	// 		}
-	// 	}
-	// }
-
-	callbackData, eventCallback, err := scrub(!boolIs(v1.binary, v1.binary_), event, data)
+	callbackData, eventCallback, err := scrub(v1.binary, event, data)
 	if err != nil {
 		return err
 	}
@@ -144,20 +168,14 @@ func (v1 inSocketV1) emit(event Event, data ...Data) error {
 		v1.on(fmt.Sprintf("%s%d", ackIDEventPrefix, transport.AckID()), eventCallback)
 	}
 
-	// last := len(data) - 1
-
-	// if callback, ok := data[last].(eventCallback); ok {
-	// 	v1.on(fmt.Sprintf("%s%d", ackIDEventPrefix, transport.AckID()), callback)
-	// }
-
 	for _, id := range v1.id {
 		transport.Send(id, callbackData, siop.WithType(siop.EventPacket.Byte()), siop.WithNamespace(v1.nsp()))
 	}
 
-	v1.delIDs()
 	return nil
 }
 
+// SocketV1 is the returned socket
 type SocketV1 struct {
 	inSocketV1
 
@@ -169,15 +187,8 @@ type SocketV1 struct {
 
 func (v1 SocketV1) Request() *Request { return v1.req }
 
-// In - sending to all clients in room, including sender
-func (v1 SocketV1) In(room Room) inToEmit {
-	rtn := v1.clone()
-	rtn.addIn(room)
-	return SocketV1{inSocketV1: rtn, ID: v1.ID, req: v1.req}
-}
-
 // To - sending to all clients in room, except sender
-func (v1 SocketV1) To(room Room) inToEmit {
+func (v1 SocketV1) To(room Room) toEmit {
 	rtn := v1.clone()
 	rtn.addTo(room)
 	return SocketV1{inSocketV1: rtn, ID: v1.ID, req: v1.req}
@@ -194,26 +205,24 @@ func (v1 SocketV1) Leave(room Room) error {
 }
 
 func (v1 SocketV1) Emit(event Event, data ...Data) error {
-	if len(v1.id) > 0 {
+	if len(v1.id) < v1.keepIdx {
+		return ErrBadSendToSocketIndex
+	}
+
+	if len(v1.id[v1.keepIdx:]) > 0 {
 		return v1.emit(event, data...)
 	}
 
 	transport := v1.tr().(siot.Emitter)
-	ids := make(map[SocketID]struct{})
 
-	var hasRoom bool
-	for _, inRoom := range v1.in {
-		// for _, id := range transport.SocketIDsFrom(v1.nsp(), inRoom) {
-		rooms, err := transport.Sockets(v1.nsp()).FromRoom(inRoom)
-		if err != nil {
-			panic(err)
-		}
-		for _, id := range rooms {
-			hasRoom = true
-			ids[id] = struct{}{}
-		}
+	// if we are not sending to clients in a room
+	// then we're just sending back to the current client...
+	if len(v1.id) == 0 && len(v1.to) == 0 {
+		v1.addID(v1.ID)
+		return v1.emit(event, data...)
 	}
 
+	var dedup = map[session.ID]struct{}{}
 	for _, toRoom := range v1.to {
 		rooms, err := transport.Sockets(v1.nsp()).FromRoom(toRoom)
 		if err != nil {
@@ -223,24 +232,19 @@ func (v1 SocketV1) Emit(event Event, data ...Data) error {
 			if id == v1.ID {
 				continue // skip sending back to sender
 			}
-			hasRoom = true
-			ids[id] = struct{}{}
+			if _, isSet := dedup[id]; !isSet {
+				v1.addID(id)
+				dedup[id] = struct{}{}
+			}
 		}
-	}
-
-	v1.delIDs()
-
-	if !hasRoom {
-		v1.addID(v1.ID)
-	}
-	for id := range ids {
-		v1.addID(id)
 	}
 
 	return v1.emit(event, data...)
 }
 
 func (v1 SocketV1) Broadcast() emit {
+	// is the [broadcast].Emit function...
+
 	transport := v1.tr().(siot.Emitter)
 	ids := make(map[SocketID]struct{})
 
@@ -261,4 +265,3 @@ func (v1 SocketV1) Broadcast() emit {
 
 func (v1 SocketV1) Volatile() broadcastEmit              { return v1 } // NOT IMPLEMENTED...
 func (v1 SocketV1) Compress(compress bool) broadcastEmit { v1.setCompress_(compress); return v1 }
-func (v1 SocketV1) Binary(binary bool) broadcastEmit     { v1.setBinary_(binary); return v1 }

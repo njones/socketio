@@ -12,12 +12,10 @@ func stoi(s []string) []interface{} {
 	return rtn
 }
 
-func boolIs(a, b bool) bool { return !(a == b && !a) } // 0 == 0 && 0 then false... otherwise true
-
 func serviceError(err error) []interface{} { return []interface{}{seri.Error(err)} }
 
-func scrub(strOnly bool, event Event, data []seri.Serializable) (out interface{}, cb eventCallback, err error) {
-	if strOnly {
+func scrub(useBinary bool, event Event, data []seri.Serializable) (out interface{}, cb eventCallback, err error) {
+	if !useBinary {
 		rtn := make([]string, len(data)+1)
 		rtn[0] = event
 		for i, v := range data {
