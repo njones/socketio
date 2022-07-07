@@ -1,7 +1,5 @@
 package protocol
 
-import "io"
-
 type Packet interface {
 	WithOption(...Option) Packet
 
@@ -9,11 +7,6 @@ type Packet interface {
 	WithNamespace(string) Packet
 	WithAckID(uint64) Packet
 	WithData(interface{}) Packet
-}
-
-type PacketReadWrite interface {
-	io.ReaderFrom
-	io.WriterTo
 }
 
 type NewPacket func() Packet
