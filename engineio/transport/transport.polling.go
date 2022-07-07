@@ -26,15 +26,15 @@ type PollingTransport struct {
 	compress func(handlerWithError) handlerWithError
 }
 
-func NewPollingTransport(ival time.Duration) func(SessionID, Codec) Transporter {
+func NewPollingTransport(chanBuf int, ival time.Duration) func(SessionID, Codec) Transporter {
 	return func(id SessionID, codec Codec) Transporter {
 		t := &PollingTransport{
 			Transport: &Transport{
 				id:      id,
 				name:    "polling",
 				codec:   codec,
-				send:    make(chan eiop.Packet, 1000),
-				receive: make(chan eiop.Packet, 1000),
+				send:    make(chan eiop.Packet, chanBuf),
+				receive: make(chan eiop.Packet, chanBuf),
 			},
 			compress: func(fn handlerWithError) handlerWithError {
 				return func(w http.ResponseWriter, r *http.Request) error {

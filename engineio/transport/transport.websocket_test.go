@@ -21,7 +21,7 @@ func TestWebsocketTransportReceive(t *testing.T) {
 		PayloadEncoder: eiop.NewPayloadEncoderV2,
 		PayloadDecoder: eiop.NewPayloadDecoderV2,
 	}
-	tr := NewWebsocketTransport()(SessionID("12345"), c)
+	tr := NewWebsocketTransport(1000)(SessionID("12345"), c)
 
 	q := new(sync.WaitGroup)
 	h := make(chan eiop.Packet, 1)

@@ -35,7 +35,7 @@ func TestPollingTransportReceive(t *testing.T) {
 
 	for _, test := range tests {
 
-		tr := NewPollingTransport(10*time.Millisecond)(SessionID("12345"), test.codec)
+		tr := NewPollingTransport(1000, 10*time.Millisecond)(SessionID("12345"), test.codec)
 
 		// Receive Test
 		t.Run(test.name, func(t2 *testing.T) {

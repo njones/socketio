@@ -29,7 +29,7 @@ func TestMapTransportSend(t *testing.T) {
 
 	wgrp := new(sync.WaitGroup)
 
-	etr := eiot.NewPollingTransport(10*time.Millisecond)(tmap.SessionID("12345"), c)
+	etr := eiot.NewPollingTransport(1000, 10*time.Millisecond)(tmap.SessionID("12345"), c)
 	str := tmap.NewMapTransport(siop.NewPacketV2)
 
 	sid, err := str.Add(etr)
@@ -78,7 +78,7 @@ func TestMapTransportReceive(t *testing.T) {
 
 	wgrp := new(sync.WaitGroup)
 
-	etr := eiot.NewPollingTransport(10*time.Millisecond)(tmap.SessionID("12345"), c)
+	etr := eiot.NewPollingTransport(1000, 10*time.Millisecond)(tmap.SessionID("12345"), c)
 	str := tmap.NewMapTransport(siop.NewPacketV2)
 
 	sid, err := str.Add(etr)

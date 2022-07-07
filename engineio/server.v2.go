@@ -37,9 +37,11 @@ type serverV2 struct {
 		path     string
 		httpOnly bool
 	}
-	initialPacket func() eiop.Packet
 
-	generateID func() SessionID
+	transportChanBuf int
+
+	initialPacket func() eiop.Packet
+	generateID    func() SessionID
 
 	codec eiot.Codec
 
@@ -58,6 +60,7 @@ func (v2 *serverV2) new(opts ...Option) *serverV2 {
 	v2.pingTimeout = 60000 * time.Millisecond
 	v2.upgradeTimeout = 10000 * time.Millisecond
 	v2.maxHttpBufferSize = 10e7
+	v2.transportChanBuf = 1000
 
 	v2.eto = append(v2.eto, eiot.WithPingTimeout(v2.pingTimeout))
 
@@ -73,8 +76,8 @@ func (v2 *serverV2) new(opts ...Option) *serverV2 {
 	v2.sessions = NewSessionMap()
 	v2.transports = make(map[eiot.Name]func(SessionID, eiot.Codec) eiot.Transporter)
 
-	WithTransport("polling", eiot.NewPollingTransport(time.Second*3))(v2)
-	WithTransport("websocket", eiot.NewWebsocketTransport())(v2)
+	WithTransport("polling", eiot.NewPollingTransport(v2.transportChanBuf, time.Second*3))(v2)
+	WithTransport("websocket", eiot.NewWebsocketTransport(v2.transportChanBuf))(v2)
 
 	v2.With(v2, opts...)
 

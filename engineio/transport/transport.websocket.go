@@ -25,7 +25,7 @@ type WebsocketTransport struct {
 	PingMsg string
 }
 
-func NewWebsocketTransport() func(SessionID, Codec) Transporter {
+func NewWebsocketTransport(chanBuf int) func(SessionID, Codec) Transporter {
 	return func(id SessionID, codec Codec) Transporter {
 		{
 			t := &WebsocketTransport{
@@ -33,8 +33,8 @@ func NewWebsocketTransport() func(SessionID, Codec) Transporter {
 					id:      id,
 					name:    "websocket",
 					codec:   codec,
-					send:    make(chan eiop.Packet, 1000),
-					receive: make(chan eiop.Packet, 1000),
+					send:    make(chan eiop.Packet, chanBuf),
+					receive: make(chan eiop.Packet, chanBuf),
 				},
 				origin:  []string{"*"},
 				PingMsg: "probe",

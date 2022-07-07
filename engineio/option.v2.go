@@ -80,3 +80,12 @@ func WithGenerateIDFunc(fn func() SessionID) Option {
 		}
 	}
 }
+
+func WithTransportChannelBuffer(n int) Option {
+	return func(svr Server) {
+		switch v := svr.(type) {
+		case *serverV2:
+			v.transportChanBuf = n
+		}
+	}
+}
