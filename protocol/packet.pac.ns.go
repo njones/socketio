@@ -12,7 +12,7 @@ func (x packetNS) Read(p []byte) (n int, err error) {
 	}
 
 	if n = copy(p, x); n < len(x) {
-		return n, PacketError{str: "buffer namespace for read", buffer: []byte(x)[n:], errs: []error{ErrShortRead}}
+		return n, ErrOnReadSoBuffer.BufferF("namespace", []byte(x)[n:], ErrShortRead)
 	}
 
 	return n, nil
@@ -35,7 +35,7 @@ func (x *packetNS) Write(p []byte) (n int, err error) {
 	for i, val := range p {
 		if i == 0 && val != '/' && len(data) == 0 {
 			*x = packetNS("/")
-			return 0, nil // ErrNoNamespace
+			return 0, nil
 		}
 		switch val {
 		case ',':

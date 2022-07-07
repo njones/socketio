@@ -13,7 +13,7 @@ func (x packetAckID) Read(p []byte) (n int, err error) {
 	n = copy(p, []byte(numStr))
 
 	if n < len(numStr) {
-		return n, PacketError{str: "buffer AckID for read", buffer: []byte(numStr)[n:], errs: []error{ErrShortRead}}
+		return n, ErrOnReadSoBuffer.BufferF("AckID", []byte(numStr)[n:], ErrShortRead)
 	}
 
 	return n, nil
@@ -39,7 +39,7 @@ AckIDNumber:
 		case '[', '"':
 			n-- // becuase we don't want to keep this character in our output, let it live for another day...
 			if n == 0 {
-				return n, nil // ErrNoAckID
+				return 0, nil
 			}
 			break AckIDNumber
 		}

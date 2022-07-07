@@ -28,7 +28,7 @@ func (x binaryStreamIn) Read(p []byte) (n int, err error) {
 	n = copy(p, numStr)
 
 	if n < len(numStr) {
-		return n, PacketError{str: "buffer binary stream for read", buffer: []byte(numStr)[n:], errs: []error{ErrShortRead}}
+		return n, ErrOnReadSoBuffer.BufferF("binary stream", []byte(numStr)[n:], ErrShortRead)
 	}
 
 	return n, nil

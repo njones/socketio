@@ -2,11 +2,14 @@ package protocol
 
 import (
 	"errors"
+	"fmt"
 
 	errs "github.com/njones/socketio/internal/errors"
 )
 
 const (
+	ErrOnReadSoBuffer errsPacket = "error reading packet type %s, save for buffer"
+
 	ErrShortRead  errs.String = "short read"
 	ErrShortWrite errs.String = "short write"
 
@@ -24,19 +27,23 @@ const (
 	ErrInvalidPacketType errs.String = "the data packet type %T does not exist"
 )
 
-type PacketError struct {
-	str    string
-	buffer []byte
+type errsPacket string
 
-	errs []error
-}
+func (e errsPacket) Error() string { return string(e) }
 
-func (e PacketError) Error() string {
-	if e.str != "" {
-		return e.str
+func (e errsPacket) BufferF(kind string, buf []byte, errs ...error) PacketError {
+	return PacketError{
+		buffer: buf,
+		errs:   append([]error{fmt.Errorf(string(e), kind)}, errs...),
 	}
-	return e.errs[0].Error()
 }
+
+type PacketError struct {
+	buffer []byte
+	errs   []error
+}
+
+func (e PacketError) Error() string { return e.errs[0].Error() }
 
 func (e PacketError) Is(target error) bool {
 	for _, err := range e.errs {

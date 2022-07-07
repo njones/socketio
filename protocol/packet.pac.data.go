@@ -35,7 +35,7 @@ func (x *packetDataString) Read(p []byte) (n int, err error) {
 	n = copy(p, data)
 
 	if n < len(data) { // this means there was no more room
-		return n, PacketError{str: "buffer string data for read", buffer: data[n:], errs: []error{err, ErrShortRead}}
+		return n, ErrOnReadSoBuffer.BufferF("string data", data[n:], ErrShortRead)
 	}
 
 	return n, err
@@ -56,7 +56,7 @@ func (x *packetDataString) Write(p []byte) (n int, err error) {
 func (x *packetDataArray) Read(p []byte) (n int, err error) {
 	if len(x.x) == 0 {
 		// always return an error, because this could be empty or just a view of an empty array
-		return 0, PacketError{str: "buffer binary data array for read", buffer: []byte("[]"), errs: []error{ErrEmptyDataArray}}
+		return 0, ErrOnReadSoBuffer.BufferF("binary data array", []byte("[]"), ErrEmptyDataArray)
 	}
 
 	n = copy(p, "[")
@@ -101,7 +101,7 @@ func (x *packetDataArray) read(p []byte) (n int, err error) {
 		n += nx
 
 		if nx < len(data) {
-			return n, PacketError{str: "buffer binary data array for read", buffer: data[nx:], errs: []error{ErrShortRead}}
+			return n, ErrOnReadSoBuffer.BufferF("binary data array", data[nx:], ErrShortRead)
 		}
 	}
 
@@ -128,7 +128,7 @@ func (x *packetDataArray) Write(p []byte) (n int, err error) {
 func (x *packetDataObject) Read(p []byte) (n int, err error) {
 	if len(x.x) == 0 {
 		// always return an error, because this could be empty or just a view of an empty array
-		return 0, PacketError{str: "buffer binary data object for read", buffer: []byte("{}"), errs: []error{ErrEmptyDataObject}}
+		return 0, ErrOnReadSoBuffer.BufferF("binary data object", []byte("{}"), ErrEmptyDataArray)
 	}
 
 	data, err := json.Marshal(packetDataObjectJSON{m: x.x})
@@ -139,7 +139,7 @@ func (x *packetDataObject) Read(p []byte) (n int, err error) {
 	n = copy(p, data)
 
 	if n < len(data) {
-		return n, PacketError{str: "buffer binary data object for read", buffer: data[n:], errs: []error{ErrShortRead}}
+		return n, ErrOnReadSoBuffer.BufferF("binary data object", data[n:], ErrShortRead) // PacketError{str: "buffer binary data object for read", buffer: data[n:], errs: []error{ErrShortRead}}
 	}
 
 	return n, err
