@@ -22,6 +22,8 @@ type (
 	Room      = string
 )
 
+// mapTransport is the structure that holds a mapping of all connected
+// clients in memory.
 type mapTransport struct {
 	ackCount uint64
 
@@ -40,6 +42,7 @@ type mapTransport struct {
 	f siop.NewPacket
 }
 
+// NewMapTransport returns a mapTransport object with all defaults.
 func NewMapTransport(sioUsePacketVersion siop.NewPacket) *mapTransport {
 	return &mapTransport{
 		ṁ: new(sync.RWMutex),
@@ -52,6 +55,7 @@ func NewMapTransport(sioUsePacketVersion siop.NewPacket) *mapTransport {
 	}
 }
 
+// AckID returns a new Ack Id based on an incrementing number.
 func (tr *mapTransport) AckID() uint64 {
 	atomic.AddUint64(&tr.ackCount, 1)
 	return tr.ackCount
@@ -59,6 +63,8 @@ func (tr *mapTransport) AckID() uint64 {
 
 // socketID to transport relationship methods
 
+// Add creates a new socket id based on adding the EngineIO transport
+// to the internal map. It returns the new socket id and any errors.
 func (tr *mapTransport) Add(et eiot.Transporter) (SocketID, error) {
 	sessionID := et.ID()
 
@@ -129,8 +135,6 @@ func (tr *mapTransport) Leave(ns Namespace, socketID SocketID, room Room) error 
 	delete(tr.r[ns][socketID], room)
 	return nil
 }
-
-//
 
 func (tr *mapTransport) Sockets(namespace Namespace) siot.SocketArray {
 	var ids []SocketID

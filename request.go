@@ -6,6 +6,7 @@ import (
 	"net/url"
 )
 
+// Request is a wrapped HTTP request object so that we expose only the things that are necessary,
 type Request struct {
 	r *http.Request
 

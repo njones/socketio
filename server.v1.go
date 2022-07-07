@@ -12,6 +12,11 @@ import (
 	siot "github.com/njones/socketio/transport"
 )
 
+// https://socket.io/blog/introducing-socket-io-1-0
+// https://socket.io/blog/socket-io-1-4-0/
+// https://socket.io/blog/socket-io-1-4-5/
+
+// ServerV1 is the same as the javascript SocketIO v1.0 server.
 type ServerV1 struct {
 	inSocketV1
 
@@ -30,12 +35,17 @@ type ServerV1 struct {
 	transport siot.Transporter
 }
 
+// NewServerV1 returns a new v1.0 SocketIO server
 func NewServerV1(opts ...Option) *ServerV1 {
 	v1 := &ServerV1{}
 	v1.new(opts...)
 	return v1
 }
 
+// new returns a new ServerV1 with the different options. This should be called
+// when setting up a new server, as it sets up the defaults. The defaults can
+// be over written by the Options. Note that the Options can also include options
+// that can be applied to the underlining engineIO server.
 func (v1 *ServerV1) new(opts ...Option) Server {
 	v1.run = runV1(v1)
 	v1.doConnectPacket = doConnectPacket(v1)
@@ -64,12 +74,15 @@ func (v1 *ServerV1) new(opts ...Option) Server {
 	return v1
 }
 
-func (v2 *ServerV1) With(svr Server, opts ...Option) {
+// With takes in a server version and applies Options to that server object.
+func (v1 *ServerV1) With(svr Server, opts ...Option) {
 	for _, opt := range opts {
 		opt(svr)
 	}
 }
 
+// ServeHTTP is the interface for applying a http request/response cycle. This handles
+// errors that can be provided by the underlining serveHTTP method that uses errors.
 func (v1 *ServerV1) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if v1.path != nil && !strings.HasPrefix(r.URL.Path, *v1.path) { // lock to the default socketio path if present
 		return
@@ -86,6 +99,8 @@ func (v1 *ServerV1) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// serveHTTP is the same as ServeHTTP but uses errors to break out of request cycles that
+// have an error. The response is handled in the upper ServeHTTP method.
 func (v1 *ServerV1) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	eioTransport, err := v1.eio.ServeTransport(w, r)
 	if err != nil {

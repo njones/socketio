@@ -7,6 +7,9 @@ import (
 	siot "github.com/njones/socketio/transport"
 )
 
+// runV1 are the callbacks that are used for version 1 of the server based on the
+// receieve of the transport and the packet type. This can be different for the
+// different server versions.
 func runV1(v1 *ServerV1) func(*Request, siot.SocketID) error {
 	return func(r *Request, socketID siot.SocketID) error {
 
@@ -48,6 +51,7 @@ func runV1(v1 *ServerV1) func(*Request, siot.SocketID) error {
 	}
 }
 
+// doConnectPacket the function
 func doConnectPacket(v1 *ServerV1) func(*Request, SocketID, siot.Socket) error {
 	return func(req *Request, socketID SocketID, socket siot.Socket) (err error) {
 		v1.transport.Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))

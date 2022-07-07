@@ -15,6 +15,8 @@ const (
 )
 
 type (
+	// SocketID is am alias of a session id, so that we don't need to
+	// reference sessions through the package
 	SocketID = sess.ID
 
 	Namespace = string
@@ -29,6 +31,7 @@ type Server = interface {
 	ServeHTTP(http.ResponseWriter, *http.Request)
 }
 
+// eventCallback is the callback that is used when an event is called
 type eventCallback interface {
 	Callback(...interface{}) error
 }
