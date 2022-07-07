@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"io"
 	"strings"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
@@ -71,7 +72,7 @@ func (t *Transport) Receive() <-chan Socket {
 
 			switch data := eioPacket.D.(type) {
 			case string:
-				sioPacket := t.packetMaker().(siop.PacketReadWrite)
+				sioPacket := t.packetMaker().(io.ReaderFrom)
 				if _, err := sioPacket.ReadFrom(strings.NewReader(data)); err != nil {
 					t.eioTransport.Send(eiop.Packet{T: eiop.NoopPacket, D: err})
 				}
