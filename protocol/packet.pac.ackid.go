@@ -2,8 +2,12 @@ package protocol
 
 import "strconv"
 
+// packetAckID represents the AckID part of a socket.io packet
 type packetAckID uint64
 
+// Read reads the AckID to the p byte slice. If the p byte slice is not big
+// enough then it errors with a buffer of the rest of the data. The error
+// can be compared to the error ErrShortRead.
 func (x packetAckID) Read(p []byte) (n int, err error) {
 	if x == 0 {
 		return
@@ -19,6 +23,7 @@ func (x packetAckID) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
+// Write writes the data coming from p to the underlining uint64 data type.
 func (x *packetAckID) Write(p []byte) (n int, err error) {
 	if len(p) == 0 {
 		return
@@ -37,7 +42,7 @@ AckIDNumber:
 		case '1', '2', '3', '4', '5', '6', '7', '8', '9', '0':
 			data = append(data, val)
 		case '[', '"':
-			n-- // becuase we don't want to keep this character in our output, let it live for another day...
+			n-- // because we don't want to keep this character in our output, let it live for another day...
 			if n == 0 {
 				return 0, nil
 			}

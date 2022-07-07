@@ -1,7 +1,11 @@
 package protocol
 
+// packetNS represents the Namespace part of a SocketIO packet
 type packetNS string
 
+// Read reads the Namespace string to the p byte slice. If the p byte slice is
+// not big enough then it errors with a buffer of the rest of the data. The error
+// can be compared to the error ErrShortRead.
 func (x packetNS) Read(p []byte) (n int, err error) {
 	if len(x) == 0 {
 		return
@@ -18,6 +22,7 @@ func (x packetNS) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
+// Write writes the data coming from p to the underlining string data type.
 func (x *packetNS) Write(p []byte) (n int, err error) {
 	if len(p) == 0 {
 		if len(*x) == 0 {

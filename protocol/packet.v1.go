@@ -4,6 +4,7 @@ import (
 	"io"
 )
 
+// The packet type codes available in the socket.io protocol version 1
 const (
 	ConnectPacket packetType = iota
 	DisconnectPacket
@@ -12,14 +13,17 @@ const (
 	ErrorPacket
 )
 
+// check that packet v1 is a valid Packet interface
 var _ Packet = &PacketV1{}
 
+// PacketV1 embeds a base packet and will convert the SocketIO version 1 values
 type PacketV1 struct {
 	packet
 
 	scratch `json:"-,omitempty"` // holds buffers and such for writing out the wire format
 }
 
+// NewPacketV1 returns a Packet interface that will read/write socket.io version 1 packets
 func NewPacketV1() Packet {
 	pac := &PacketV1{}
 	pac.init()
@@ -35,16 +39,24 @@ func (pac *PacketV1) init() {
 // to the underlining engineio packet
 //
 
+// Copy forces an io.Copy to use the .Read and .Write methods to provide the copy
 func (pac *PacketV1) Copy(w io.Writer, r io.Reader) (n int64, err error) {
 	return io.Copy(underlining(w, r))
 }
+
+// ReadFrom copies the []bytes from the socket.io wire format to the PacketV1 struct.
 func (pac *PacketV1) ReadFrom(r io.Reader) (n int64, err error) { return pac.Copy(pac, r) }
-func (pac *PacketV1) WriteTo(w io.Writer) (n int64, err error)  { return pac.Copy(w, pac) }
+
+// WriteTo copies the PacketV1 struct to the []byte socket.io wire format.
+func (pac *PacketV1) WriteTo(w io.Writer) (n int64, err error) { return pac.Copy(w, pac) }
 
 // provides the io.Reader/io.Writer interface to
 // read and write the *version 1* socket.io wire
 // (string) format
 
+// Read writes out the PacketV1 object to a socket.io protocol version 1 wire format
+// to p []bytes. This method can handle Read being called multiple times during the
+// course of populating the []bytes.
 func (pac *PacketV1) Read(p []byte) (n int, err error) {
 	if len(pac.scratch.read.states) == 0 &&
 		len(pac.scratch.read.buffer) == 0 {
@@ -89,6 +101,8 @@ func (pac *PacketV1) Read(p []byte) (n int, err error) {
 	return pac.scratch.read.n, pac.scratch.read.err
 }
 
+// Write takes in protocol version 1 wire format in p []bytes. This method
+// can handle Read being called multiple times during the course of populating the PacketV1 object.
 func (pac *PacketV1) Write(p []byte) (n int, err error) {
 	if len(pac.scratch.write.states) == 0 &&
 		len(pac.scratch.write.buffer) == 0 {
@@ -119,6 +133,10 @@ func (pac *PacketV1) Write(p []byte) (n int, err error) {
 	return pac.scratch.write.n, pac.scratch.write.err
 }
 
+// writeDataToPacketV1 takes in a writer w that will contain the
+// Data portion of the socket.io protocol version 1 wire format
+// and convert it to the proper internal data format for the
+// PacketV1 object.
 func writeDataToPacketV1(w io.Writer) writeStateFn {
 	return func(p []byte) stateFn {
 		return func(scr *scratch) stateFn {

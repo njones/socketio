@@ -5,6 +5,7 @@ import (
 	"strconv"
 )
 
+// binaryStreamOut takes the binary data stream
 type binaryStreamOut struct {
 	idx int
 	rdr []io.Reader
@@ -17,6 +18,7 @@ func (x *binaryStreamOut) WriteTo(w io.Writer) (n int64, err error) {
 	return
 }
 
+// binaryStreamIn
 type binaryStreamIn []func(io.Reader) error
 
 func (x binaryStreamIn) Read(p []byte) (n int, err error) {

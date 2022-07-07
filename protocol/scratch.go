@@ -6,46 +6,55 @@ import (
 )
 
 type (
-	stateFn      func(*scratch) stateFn
-	readStateFn  func([]byte) stateFn
-	writeStateFn func([]byte) stateFn
+	stateFn      func(*scratch) stateFn // keeping state around the "scratch" pad data
+	readStateFn  func([]byte) stateFn   // the read state
+	writeStateFn func([]byte) stateFn   // the write state
 )
 
+// scratch holds the states the buffer and any data that's needed to facilitate reading
+// and writing data to an underlining Packet object.
 type scratch struct {
 	data struct {
 		set func(packetData)
 	}
 
 	read struct {
-		n   int
-		err error
+		n   int   // the current bytes read
+		err error // the current error if not nil
 
 		hasNamespaceComma bool
 
-		buffer []byte
-		states []readStateFn
+		buffer []byte        // the buffer to drain if not empty
+		states []readStateFn // the remaining states to execute if not empty
 	}
 	write struct {
-		n   int
-		err error
+		n   int   // the current bytes written
+		err error // the current error if not nil
 
 		isBinary bool
 
-		buffer []byte
-		states []writeStateFn
+		buffer []byte         // the buffer to drain if not empty
+		states []writeStateFn // the remaining states to execute if not empty
 	}
 }
 
+// resetRead resets the Reader to start again, reseting all of values so that
+// it can start from a clean state
 func (scr *scratch) resetRead() {
 	scr.read.n, scr.read.err = 0, nil
 	scr.read.hasNamespaceComma = false
 }
 
+// resetWrite resets the Writer to start again, reseting all of values so that
+// it can start from a clean state
 func (scr *scratch) resetWrite() {
 	scr.write.n, scr.write.err = 0, nil
 	scr.write.isBinary = false
 }
 
+// readFromPacket is the read state for reading an individual packet type, which
+// is split out by field in the packet object. This executes a single state
+// and removes it from the states list after execution.
 func readFromPacket(r io.Reader) readStateFn {
 	return func(p []byte) stateFn {
 		return func(scr *scratch) stateFn {
@@ -70,12 +79,15 @@ func readFromPacket(r io.Reader) readStateFn {
 	}
 }
 
+// readNamespaceFromPacket is a specialized state that wraps reading the Namespace
+// packet, it checks to see if ut should add a "," before the namespace if there
+// is a namespace to output.
 func readNamespaceFromPacket(ns packetNS, ackID packetAckID, data packetData) readStateFn {
 	return func(p []byte) stateFn {
 		return func(scr *scratch) stateFn {
 			if len(ns) > 1 && (ackID > 0 || data != nil) {
 				if ns[len(ns)-1] != ',' {
-					ns += "," // not propgated becuase it's not a pointer
+					ns += "," // not propgated because it's not a pointer
 				}
 			}
 			return readFromPacket(ns)(p)
@@ -83,6 +95,8 @@ func readNamespaceFromPacket(ns packetNS, ackID packetAckID, data packetData) re
 	}
 }
 
+// applyAttachments checks to see if there are any binary streams to attach while reading
+// the packet data.
 func applyAttachments(data packetData, in *binaryStreamIn, out *binaryStreamOut) readStateFn {
 	return func(p []byte) stateFn {
 		return func(scr *scratch) stateFn {
@@ -103,6 +117,9 @@ func applyAttachments(data packetData, in *binaryStreamIn, out *binaryStreamOut)
 	}
 }
 
+// readDataFromPacket wraps the packet type reader and can handle short reads
+// it will populate the buffer and send back a <nil> error so that it can
+// collect more data after the short read,
 func readDataFromPacket(r io.Reader) readStateFn {
 	return func(p []byte) stateFn {
 		return func(scr *scratch) stateFn {
@@ -308,10 +325,4 @@ func withPacketData(v interface{}) packetData {
 	default:
 		return readWriteErr{ErrInvalidPacketType.F(val)}
 	}
-
-	/*
-		if rw, ok := v.(io.ReadWriter); ok {
-			return rw
-		}
-	*/
 }
