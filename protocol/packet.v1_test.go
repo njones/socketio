@@ -38,6 +38,15 @@ func TestPacketV1Read(ext *testing.T) {
 			},
 		},
 		{
+			name: "CONNECT admin ns",
+			pac:  PacketV1{packet: packet{Type: ConnectPacket, Namespace: packetNS("admin")}},
+			want: want{
+				data: [][]byte{[]byte(`0admin`)},
+				n:    6,
+				err:  nil,
+			},
+		},
+		{
 			name: "EVENT",
 			pac:  PacketV1{packet: packet{Type: EventPacket, Namespace: packetNS("/"), Data: &packetDataArray{skipBinary: true, x: []interface{}{"hello", 1.0}}}},
 			want: want{
