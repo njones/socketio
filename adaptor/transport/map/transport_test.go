@@ -13,7 +13,6 @@ import (
 	eiot "github.com/njones/socketio/engineio/transport"
 	siop "github.com/njones/socketio/protocol"
 	sess "github.com/njones/socketio/session"
-	"github.com/njones/socketio/transport"
 	siot "github.com/njones/socketio/transport"
 	"github.com/stretchr/testify/assert"
 )
@@ -127,7 +126,7 @@ func TestMapTransportReceive(t *testing.T) {
 	data := "This is cool"
 
 	have := <-str.Receive(sid)
-	want := transport.Socket{
+	want := tmap.Socket{
 		Type:      byte(eiop.OpenPacket),
 		Namespace: "/",
 		AckID:     0x0,
