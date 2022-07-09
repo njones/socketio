@@ -70,16 +70,16 @@ _inside of a function_
 
 The following is in no particular order. Please open an Issue for priority or open a PR to contribute to this list.
 
+- [ ] Flesh out all tests
+- [ ] Document all public functions
+- [ ] Documentation
 - [ ] Develop a Client 
 - [ ] Develop a Redis Transport
 - [ ] Makefile for all individual version builds
 - [ ] Makefile for all individual version git commits
-- [ ] Document all public functions
 - [ ] Complete SocketIO Version 4
 - [ ] Complete EIO Server Version 5
 - [ ] Complete EIO Server Version 6
-- [ ] Flesh out all tests
-- [ ] Documentation
 - [ ] Complete this README
 
 ## License
