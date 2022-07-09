@@ -56,6 +56,9 @@ func NewMapTransport(sioUsePacketVersion siop.NewPacket) *mapTransport {
 }
 
 // AckID returns a new Ack Id based on an incrementing number.
+// This number starts from zero everytime the server is restarted. This
+// could cause issues if the server is restarting before the ackid that
+// was previously sent is consumed.
 func (tr *mapTransport) AckID() uint64 {
 	atomic.AddUint64(&tr.ackCount, 1)
 	return tr.ackCount
@@ -85,6 +88,10 @@ func (tr *mapTransport) Add(et eiot.Transporter) (SocketID, error) {
 func (tr *mapTransport) Set(socketID SocketID, et eiot.Transporter) error {
 	tr.ṡ.Lock()
 	defer tr.ṡ.Unlock()
+
+	if et == nil {
+		return ErrNilTransporter
+	}
 
 	tr.s[socketID] = siot.NewTransport(socketID, et, tr.f)
 	return nil
