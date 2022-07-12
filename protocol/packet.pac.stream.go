@@ -54,10 +54,10 @@ func (x *binaryStreamIn) Write(p []byte) (n int, err error) {
 			continue
 		case '-':
 			k, err := strconv.ParseInt(string(data), 10, 64)
-			*x = make([]func(io.Reader) error, k)
 			if err != nil {
 				err = ErrBadParse.F("incoming binary stream", err)
 			}
+			*x = make([]func(io.Reader) error, k)
 			return n, err
 		}
 		if i == 0 {

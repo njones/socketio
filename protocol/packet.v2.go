@@ -188,9 +188,13 @@ func writeDataToPacketV2(w io.Writer, in *binaryStreamIn) writeStateFn {
 			case '"':
 				return writeDataStringToPacket(w)(p)
 			case '[':
-				return writeDataArrayToPacket(w, in)(p)
+				return writeDataArrayToPacket(w,
+					withArrayMarshal(packetDataMarshalV2),
+					withArrayUnmarshal(packetDataArrayUnmarshalV2))(p)
 			case '{':
-				return writeDataObjectToPacket(w, in)(p)
+				return writeDataObjectToPacket(w,
+					withObjectMarshal(packetDataMarshalV2),
+					withObjectUnmarshal(packetDataObjectUnmarshalV2))(p)
 			}
 
 			return nil

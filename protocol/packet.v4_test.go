@@ -4,33 +4,32 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-type testReadV3 func(PacketV3, [][]byte, error) func(*testing.T)
-type testWriteV3 func([][]byte, PacketV3, error) func(*testing.T)
+type testReadV4 func(PacketV4, [][]byte, error) func(*testing.T)
+type testWriteV4 func([][]byte, PacketV4, error) func(*testing.T)
 
-func mergeReadV3(dst, src map[string]func() (PacketV3, [][]byte, error)) {
+func mergeReadV4(dst, src map[string]func() (PacketV4, [][]byte, error)) {
 	for k, v := range src {
 		dst[k] = v
 	}
 }
 
-func mergeWriteV3(dst, src map[string]func() ([][]byte, PacketV3, error)) {
+func mergeWriteV4(dst, src map[string]func() ([][]byte, PacketV4, error)) {
 	for k, v := range src {
 		dst[k] = v
 	}
 }
 
-func TestPacketV3Read(t *testing.T) {
+func TestPacketV4Read(t *testing.T) {
 	var opts []testoption
 
-	testchecks := map[string]func(checks ...testoption) testReadV3{
-		".ReadFrom": func(checks ...testoption) testReadV3 {
-			return func(pac PacketV3, want [][]byte, xerr error) func(*testing.T) {
+	testchecks := map[string]func(checks ...testoption) testReadV4{
+		".ReadFrom": func(checks ...testoption) testReadV4 {
+			return func(pac PacketV4, want [][]byte, xerr error) func(*testing.T) {
 				return func(t *testing.T) {
 					for _, check := range checks {
 						check(t)
@@ -54,8 +53,8 @@ func TestPacketV3Read(t *testing.T) {
 				}
 			}
 		},
-		".WriteTo": func(checks ...testoption) testReadV3 {
-			return func(pac PacketV3, want [][]byte, xerr error) func(*testing.T) {
+		".WriteTo": func(checks ...testoption) testReadV4 {
+			return func(pac PacketV4, want [][]byte, xerr error) func(*testing.T) {
 				return func(t *testing.T) {
 					for _, check := range checks {
 						check(t)
@@ -81,98 +80,116 @@ func TestPacketV3Read(t *testing.T) {
 		},
 	}
 
-	spec := map[string]func() (PacketV3, [][]byte, error){
-		"CONNECT": func() (PacketV3, [][]byte, error) {
-			return *NewPacketV3().(*PacketV3), [][]byte{[]byte(`0`)}, nil
+	spec := map[string]func() (PacketV4, [][]byte, error){
+		"CONNECT": func() (PacketV4, [][]byte, error) {
+			want := [][]byte{[]byte(`0`)}
+			data := *NewPacketV4().(*PacketV4)
+			return data, want, nil
 		},
-		"DISCONNECT": func() (PacketV3, [][]byte, error) {
+		"DISCONNECT": func() (PacketV4, [][]byte, error) {
 			want := [][]byte{[]byte(`1/admin`)}
-			data := *NewPacketV3().
+			data := *NewPacketV4().
 				WithType(DisconnectPacket.Byte()).
-				WithNamespace("/admin").(*PacketV3)
+				WithNamespace("/admin").(*PacketV4)
 			return data, want, nil
 		},
-		"EVENT": func() (PacketV3, [][]byte, error) {
+		"EVENT": func() (PacketV4, [][]byte, error) {
 			want := [][]byte{[]byte(`2["hello",1]`)}
-			data := *NewPacketV3().
+			data := *NewPacketV4().
 				WithType(EventPacket.Byte()).
-				WithData([]interface{}{"hello", 1.0}).(*PacketV3)
+				WithData([]interface{}{"hello", 1.0}).(*PacketV4)
 			return data, want, nil
 		},
-		"EVENT with AckID": func() (PacketV3, [][]byte, error) {
+		"EVENT with AckID": func() (PacketV4, [][]byte, error) {
 			want := [][]byte{[]byte(`2/admin,456["project:delete",123]`)}
-			data := *NewPacketV3().
+			data := *NewPacketV4().
 				WithNamespace("/admin").
 				WithType(EventPacket.Byte()).
 				WithData([]interface{}{"project:delete", 123.0}).
-				WithAckID(456).(*PacketV3)
+				WithAckID(456).(*PacketV4)
 			return data, want, nil
 		},
-		"ACK": func() (PacketV3, [][]byte, error) {
+		"ACK": func() (PacketV4, [][]byte, error) {
 			want := [][]byte{[]byte(`3/admin,456[]`)}
-			data := *NewPacketV3().
+			data := *NewPacketV4().
 				WithNamespace("/admin").
 				WithType(AckPacket.Byte()).
 				WithData([]interface{}{}).
-				WithAckID(456).(*PacketV3)
+				WithAckID(456).(*PacketV4)
 			return data, want, nil
 		},
-		"ERROR": func() (PacketV3, [][]byte, error) {
+		"ERROR": func() (PacketV4, [][]byte, error) {
 			want := [][]byte{[]byte(`4/admin,"Not authorized"`)}
-			data := *NewPacketV3().
+			data := *NewPacketV4().
 				WithNamespace("/admin").
 				WithType(ErrorPacket.Byte()).
-				WithData(&notAuthorized).(*PacketV3)
+				WithData(&notAuthorized).(*PacketV4)
 			return data, want, nil
 		},
-		"BINARY EVENT": func() (PacketV3, [][]byte, error) {
+		"BINARY EVENT": func() (PacketV4, [][]byte, error) {
 			want := [][]byte{
 				[]byte(`51-["hello",{"_placeholder":true,"num":0}]`),
 				{0x01, 0x02, 0x03},
 			}
-			data := *NewPacketV3().
+			data := *NewPacketV4().
 				WithType(BinaryEventPacket.Byte()).
-				WithData([]interface{}{"hello", bytes.NewReader([]byte{0x01, 0x02, 0x03})}).(*PacketV3)
+				WithData([]interface{}{"hello", bytes.NewReader([]byte{0x01, 0x02, 0x03})}).(*PacketV4)
 			return data, want, nil
 		},
-		"BINARY EVENT with AckID": func() (PacketV3, [][]byte, error) {
+		"BINARY EVENT with AckID": func() (PacketV4, [][]byte, error) {
 			want := [][]byte{
 				[]byte(`51-/admin,456["hello",{"_placeholder":true,"num":0}]`),
 				{0x01, 0x02, 0x03},
 			}
-			data := *NewPacketV3().
+			data := *NewPacketV4().
 				WithType(BinaryEventPacket.Byte()).
 				WithNamespace("/admin").
 				WithData([]interface{}{"hello", bytes.NewReader([]byte{0x01, 0x02, 0x03})}).
-				WithAckID(456).(*PacketV3)
+				WithAckID(456).(*PacketV4)
+			return data, want, nil
+		},
+		"BINARY ACK": func() (PacketV4, [][]byte, error) {
+			want := [][]byte{
+				[]byte(`61-/admin,456[{"_placeholder":true,"num":0}]`),
+				{0x03, 0x02, 0x01},
+			}
+			data := *NewPacketV4().
+				WithType(BinaryAckPacket.Byte()).
+				WithNamespace("/admin").
+				WithData([]interface{}{bytes.NewReader([]byte{0x03, 0x02, 0x01})}).
+				WithAckID(456).(*PacketV4)
 			return data, want, nil
 		},
 	}
 
-	extra := map[string]func() (PacketV3, [][]byte, error){
-		"CONNECT /admin ns": func() (PacketV3, [][]byte, error) {
+	extra := map[string]func() (PacketV4, [][]byte, error){
+		"CONNECT /admin ns": func() (PacketV4, [][]byte, error) {
 			want := [][]byte{[]byte(`0/admin`)}
-			data := *NewPacketV3().
-				WithNamespace("/admin").(*PacketV3)
+			data := *NewPacketV4().
+				WithNamespace("/admin").(*PacketV4)
 			return data, want, nil
 		},
-		"CONNECT /admin ns and extra info": func() (PacketV3, [][]byte, error) {
+		"CONNECT /admin ns and extra info": func() (PacketV4, [][]byte, error) {
 			want := [][]byte{[]byte(`0/admin?token=1234&uid=abcd`)}
-			data := *NewPacketV3().
-				WithNamespace("/admin?token=1234&uid=abcd").(*PacketV3)
+			data := *NewPacketV4().
+				WithNamespace("/admin?token=1234&uid=abcd").(*PacketV4)
 			return data, want, nil
 		},
-		"EVENT with Binary": func() (PacketV3, [][]byte, error) {
-			want := [][]byte{[]byte(`21-[{"_placeholder":true,"num":0}]`)}
-			data := *NewPacketV3().
-				WithType(EventPacket.Byte()).
-				WithNamespace("/").
-				WithData([]interface{}{strings.NewReader("binary data")}).(*PacketV3)
+		"BINARY ACK with ": func() (PacketV4, [][]byte, error) {
+			want := [][]byte{
+				[]byte(`61-/admin,456{"stream":{"_placeholder":true,"num":0}}`),
+				{0x03, 0x02, 0x01},
+			}
+			data := *NewPacketV4().
+				WithType(BinaryAckPacket.Byte()).
+				WithNamespace("/admin").
+				WithData(map[string]interface{}{"stream": bytes.NewReader([]byte{0x03, 0x02, 0x01})}).
+				WithAckID(456).(*PacketV4)
 			return data, want, nil
 		},
 	}
 
-	mergeReadV3(extra, spec)
+	mergeReadV4(extra, spec)
 	for name, testing := range extra {
 		for _, testcheck := range testchecks {
 			t.Run(name, testcheck(opts...)(testing()))
@@ -180,17 +197,17 @@ func TestPacketV3Read(t *testing.T) {
 	}
 }
 
-func TestWritePacketV3(t *testing.T) {
+func TestWritePacketV4(t *testing.T) {
 	var opts []testoption
 
-	testcheck := func(checks ...testoption) testWriteV3 {
-		return func(data [][]byte, want PacketV3, xerr error) func(*testing.T) {
+	testcheck := func(checks ...testoption) testWriteV4 {
+		return func(data [][]byte, want PacketV4, xerr error) func(*testing.T) {
 			return func(t *testing.T) {
 				for _, check := range checks {
 					check(t)
 				}
 
-				var have PacketV3
+				var have PacketV4
 				n, err := (&have).Write(data[0])
 
 				assert.Equal(t, len(data[0]), n, "the data length")
@@ -232,82 +249,106 @@ func TestWritePacketV3(t *testing.T) {
 		}
 	}
 
-	spec := map[string]func() ([][]byte, PacketV3, error){
-		"CONNECT": func() ([][]byte, PacketV3, error) {
+	spec := map[string]func() ([][]byte, PacketV4, error){
+		"CONNECT": func() ([][]byte, PacketV4, error) {
 			data := [][]byte{[]byte(`0`)}
-			want := *NewPacketV3().WithNamespace("/").(*PacketV3)
+			want := *NewPacketV4().WithNamespace("/").(*PacketV4)
 			return data, want, nil
 		},
-		"DISCONNECT": func() ([][]byte, PacketV3, error) {
+		"DISCONNECT": func() ([][]byte, PacketV4, error) {
 			data := [][]byte{[]byte(`1`)}
-			want := *NewPacketV3().
+			want := *NewPacketV4().
 				WithType(DisconnectPacket.Byte()).
-				WithNamespace("/").(*PacketV3)
+				WithNamespace("/").(*PacketV4)
 			return data, want, nil
 		},
-		"EVENT": func() ([][]byte, PacketV3, error) {
+		"EVENT": func() ([][]byte, PacketV4, error) {
 			data := [][]byte{[]byte(`2["hello",1]`)}
-			want := *NewPacketV3().
+			want := *NewPacketV4().
 				WithType(EventPacket.Byte()).
 				WithNamespace("/").
-				WithData([]interface{}{"hello", 1.0}).(*PacketV3)
+				WithData([]interface{}{"hello", 1.0}).(*PacketV4)
 			return data, want, nil
 		},
-		"EVENT with AckID": func() ([][]byte, PacketV3, error) {
+		"EVENT with AckID": func() ([][]byte, PacketV4, error) {
 			data := [][]byte{[]byte(`2/admin,456["project:delete",123]`)}
-			want := *NewPacketV3().
+			want := *NewPacketV4().
 				WithType(EventPacket.Byte()).
 				WithNamespace("/admin").
 				WithData([]interface{}{"project:delete", 123.0}).
-				WithAckID(456).(*PacketV3)
-			return data,
-				want, nil
+				WithAckID(456).(*PacketV4)
+			return data, want, nil
 		},
-		"ACK": func() ([][]byte, PacketV3, error) {
+		"ACK": func() ([][]byte, PacketV4, error) {
 			data := [][]byte{[]byte(`3/admin,456[]`)}
-			want := *NewPacketV3().
+			want := *NewPacketV4().
 				WithType(AckPacket.Byte()).
 				WithNamespace("/admin").
 				WithData([]interface{}{}).
-				WithAckID(456).(*PacketV3)
+				WithAckID(456).(*PacketV4)
 			return data, want, nil
 		},
-		"ERROR": func() ([][]byte, PacketV3, error) {
+		"ERROR": func() ([][]byte, PacketV4, error) {
 			data := [][]byte{[]byte(`4/admin,"Not authorized"`)}
-			want := *NewPacketV3().
+			want := *NewPacketV4().
 				WithType(ErrorPacket.Byte()).
 				WithNamespace("/admin").
-				WithData(notAuthorized).(*PacketV3)
+				WithData(notAuthorized).(*PacketV4)
 			return data, want, nil
 		},
-		"BINARY EVENT": func() ([][]byte, PacketV3, error) {
+		"BINARY EVENT": func() ([][]byte, PacketV4, error) {
 			data := [][]byte{
 				[]byte(`51-["hello",{"_placeholder":true,"num":0}]`),
 				{0x01, 0x02, 0x03},
 			}
-			want := *NewPacketV3().
+			want := *NewPacketV4().
 				WithType(BinaryEventPacket.Byte()).
 				WithNamespace("/").
-				WithData([]interface{}{"hello", bytes.NewReader([]byte{0x01, 0x02, 0x03})}).(*PacketV3)
+				WithData([]interface{}{"hello", bytes.NewReader([]byte{0x01, 0x02, 0x03})}).(*PacketV4)
 			return data, want, nil
 		},
-		"BINARY EVENT with AckID": func() ([][]byte, PacketV3, error) {
+		"BINARY EVENT with AckID": func() ([][]byte, PacketV4, error) {
 			data := [][]byte{
 				[]byte(`51-/admin,456["hello",{"_placeholder":true,"num":0}]`),
 				{0x01, 0x02, 0x03},
 			}
-			want := *NewPacketV3().
+			want := *NewPacketV4().
 				WithType(BinaryEventPacket.Byte()).
 				WithNamespace("/admin").
 				WithAckID(456).
-				WithData([]interface{}{"hello", bytes.NewReader([]byte{0x01, 0x02, 0x03})}).(*PacketV3)
+				WithData([]interface{}{"hello", bytes.NewReader([]byte{0x01, 0x02, 0x03})}).(*PacketV4)
+			return data, want, nil
+		},
+		"BINARY ACK": func() ([][]byte, PacketV4, error) {
+			data := [][]byte{
+				[]byte(`61-/admin,456[{"_placeholder":true,"num":0}]`),
+				{0x03, 0x02, 0x01},
+			}
+			want := *NewPacketV4().
+				WithType(BinaryAckPacket.Byte()).
+				WithNamespace("/admin").
+				WithAckID(456).
+				WithData([]interface{}{bytes.NewReader([]byte{0x03, 0x02, 0x01})}).(*PacketV4)
 			return data, want, nil
 		},
 	}
 
-	extra := map[string]func() ([][]byte, PacketV3, error){}
+	extra := map[string]func() ([][]byte, PacketV4, error){
+		"BINARY ACK with ": func() ([][]byte, PacketV4, error) {
+			data := [][]byte{
+				[]byte(`61-/admin,456{"stream":{"_placeholder":true,"num":0}}`),
+				{0x03, 0x02, 0x01},
+			}
+			want := *NewPacketV4().
+				WithType(BinaryAckPacket.Byte()).
+				WithNamespace("/admin").
+				WithData(map[string]interface{}{"stream": bytes.NewReader([]byte{0x03, 0x02, 0x01})}).
+				WithAckID(456).(*PacketV4)
+			return data, want, nil
+		},
+	}
 
-	mergeWriteV3(extra, spec)
+	mergeWriteV4(extra, spec)
 
 	for name, testing := range extra {
 		t.Run(name, testcheck(opts...)(testing()))

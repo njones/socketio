@@ -5,6 +5,7 @@ package protocol
 //   https://github.com/socketio/socket.io-protocol#difference-between-v3-and-v2
 
 import (
+	"encoding/json"
 	"io"
 )
 
@@ -26,6 +27,8 @@ func NewPacketV3() Packet {
 func (pac *PacketV3) init() {
 	pac.packet.ket = func() Packet { return pac }
 }
+
+// func (pac *PacketV3) WithData(x interface{}) Packet {
 
 //
 // provides the io.ReaderFrom/io.WriterTo interface for writing data
@@ -137,11 +140,89 @@ func writeDataToPacketV3(w io.Writer, in *binaryStreamIn) writeStateFn {
 			switch p[0] {
 			case '"':
 				return writeDataStringToPacket(w)(p)
-			case '[', '{':
-				return writeDataArrayToPacket(w, in)(p)
+			case '[':
+				return writeDataArrayToPacket(w,
+					withArrayUnmarshal(packetDataArrayUnmarshalV3(in)))(p)
+			case '{':
+				return writeDataObjectToPacket(w,
+					withObjectUnmarshal(packetDataObjectUnmarshalV3(in)))(p)
 			}
 
 			return nil
 		}
+	}
+}
+
+func packetDataArrayUnmarshalV3(incoming *binaryStreamIn) func([]byte, interface{}) error {
+	return func(data_ []byte, vw interface{}) error {
+		err := json.Unmarshal(data_, vw)
+		if err != nil {
+			return ErrBadInitialFieldUnmarshal.F(err)
+		}
+
+		// replace your binary data...
+		if datax, ok := vw.(*[]interface{}); ok {
+			for i, v := range *datax {
+				if m, ok := v.(map[string]interface{}); ok {
+					if isPlaceholder, ok := m["_placeholder"].(bool); ok && isPlaceholder {
+						pr, pw := io.Pipe()
+						idx := int(m["num"].(float64))
+						(*incoming)[idx] = func(r io.Reader) error {
+
+							e := make(chan error, 1)
+							go func() {
+								io.Copy(pw, r)
+								e <- pw.Close()
+							}()
+
+							return <-e
+						}
+
+						vvw, _ := vw.(*[]interface{})
+						(*vvw)[i] = io.Reader(pr)
+					}
+				}
+			}
+		}
+		return nil
+	}
+}
+
+func packetDataObjectUnmarshalV3(incoming *binaryStreamIn) func([]byte, interface{}) error {
+	return func(data_ []byte, vw interface{}) error {
+		err := json.Unmarshal(data_, vw)
+		if err != nil {
+			return ErrBadInitialFieldUnmarshal.F(err)
+		}
+
+		// replace your binary data...
+		data, _ := vw.(*map[string]interface{})
+		var loop func(map[string]interface{})
+		loop = func(x map[string]interface{}) {
+			for i, v := range x {
+				if m, ok := v.(map[string]interface{}); ok {
+					if isPlaceholder, ok := m["_placeholder"].(bool); ok && isPlaceholder {
+						pr, pw := io.Pipe()
+						idx := int(m["num"].(float64))
+						(*incoming)[idx] = func(r io.Reader) error {
+
+							e := make(chan error, 1)
+							go func() {
+								io.Copy(pw, r)
+								e <- pw.Close()
+							}()
+
+							return <-e
+						}
+						(*data)[i] = io.Reader(pr)
+					} else {
+						loop(m)
+					}
+				}
+			}
+		}
+		loop(*data)
+
+		return nil
 	}
 }

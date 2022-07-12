@@ -30,6 +30,10 @@ import (
 	"io"
 )
 
+const (
+	ConnectErrorPacket packetType = ErrorPacket
+)
+
 var _ Packet = &PacketV5{}
 
 type PacketV5 struct {
