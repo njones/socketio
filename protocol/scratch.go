@@ -1,7 +1,9 @@
 package protocol
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -101,9 +103,19 @@ func applyAttachments(data packetData, in *binaryStreamIn, out *binaryStreamOut)
 	return func(p []byte) stateFn {
 		return func(scr *scratch) stateFn {
 
-			if array, ok := data.(*packetDataArray); ok {
+			switch field := data.(type) {
+			case *packetDataArray:
 				var num int
-				for _, item := range array.x {
+				for _, item := range field.x {
+					if r, ok := item.(io.Reader); ok {
+						out.rdr = append(out.rdr, r)
+						num++
+					}
+				}
+				*in = make(binaryStreamIn, num)
+			case *packetDataObject:
+				var num int
+				for _, item := range field.x {
 					if r, ok := item.(io.Reader); ok {
 						out.rdr = append(out.rdr, r)
 						num++
@@ -194,14 +206,18 @@ func writeDataStringToPacket(w io.Writer) writeStateFn {
 	}
 }
 
-func writeDataArrayToPacket(w io.Writer, incoming *binaryStreamIn) writeStateFn {
+func writeDataArrayToPacket(w io.Writer, opts ...func(*packetDataArray)) writeStateFn {
 	return func(p []byte) stateFn {
 		return func(scr *scratch) stateFn {
 			if w == nil {
-				w = &packetDataArray{}
+				w = newPacketDataArray()
 				defer func() {
 					scr.data.set(packetData(w.(io.ReadWriter)))
 				}()
+			}
+
+			for _, opt := range opts {
+				opt(w.(*packetDataArray))
 			}
 
 			n, err := w.Write(p)
@@ -217,28 +233,6 @@ func writeDataArrayToPacket(w io.Writer, incoming *binaryStreamIn) writeStateFn 
 
 			if err != nil {
 				return nil
-			}
-
-			// replace your binary data...
-			data, _ := w.(*packetDataArray)
-			for i, v := range data.x {
-				if m, ok := v.(map[string]interface{}); ok {
-					if isPlaceholder, ok := m["_placeholder"].(bool); ok && isPlaceholder {
-						pr, pw := io.Pipe()
-						idx := int(m["num"].(float64))
-						(*incoming)[idx] = func(r io.Reader) error {
-
-							e := make(chan error, 1)
-							go func() {
-								io.Copy(pw, r)
-								e <- pw.Close()
-							}()
-
-							return <-e
-						}
-						data.x[i] = io.Reader(pr)
-					}
-				}
 			}
 
 			scr.write.states = scr.write.states[1:]
@@ -251,14 +245,18 @@ func writeDataArrayToPacket(w io.Writer, incoming *binaryStreamIn) writeStateFn 
 	}
 }
 
-func writeDataObjectToPacket(w io.Writer, incoming *binaryStreamIn) writeStateFn {
+func writeDataObjectToPacket(w io.Writer, opts ...func(*packetDataObject)) writeStateFn {
 	return func(p []byte) stateFn {
 		return func(scr *scratch) stateFn {
 			if w == nil {
-				w = &packetDataObject{}
+				w = newPacketDataObject()
 				defer func() {
 					scr.data.set(packetData(w.(io.ReadWriter)))
 				}()
+			}
+
+			for _, opt := range opts {
+				opt(w.(*packetDataObject))
 			}
 
 			n, err := w.Write(p)
@@ -276,34 +274,6 @@ func writeDataObjectToPacket(w io.Writer, incoming *binaryStreamIn) writeStateFn
 				return nil
 			}
 
-			// replace your binary data...
-			data, _ := w.(*packetDataObject)
-			var loop func(map[string]interface{})
-			loop = func(x map[string]interface{}) {
-				for i, v := range x {
-					if m, ok := v.(map[string]interface{}); ok {
-						if isPlaceholder, ok := m["_placeholder"].(bool); ok && isPlaceholder {
-							pr, pw := io.Pipe()
-							idx := int(m["num"].(float64))
-							(*incoming)[idx] = func(r io.Reader) error {
-
-								e := make(chan error, 1)
-								go func() {
-									io.Copy(pw, r)
-									e <- pw.Close()
-								}()
-
-								return <-e
-							}
-							data.x[i] = io.Reader(pr)
-						} else {
-							loop(m)
-						}
-					}
-				}
-			}
-			loop(data.x)
-
 			scr.write.states = scr.write.states[1:]
 			if len(scr.write.states) == 0 {
 				return nil
@@ -312,17 +282,79 @@ func writeDataObjectToPacket(w io.Writer, incoming *binaryStreamIn) writeStateFn
 			return scr.write.states[0](p[n:])
 		}
 	}
+}
+
+func defaultMarshalBinaryData(num int, r io.Reader) ([]byte, error) {
+	data := []byte(fmt.Sprintf(`{"_placeholder":true,"num":%d}`, num))
+	return data, nil
 }
 
 func withPacketData(v interface{}) packetData {
 	switch val := v.(type) {
 	case string:
 		return &packetDataString{x: &val}
+	case *string:
+		return &packetDataString{x: val}
 	case []interface{}:
-		return &packetDataArray{x: val}
+		return newPacketDataArray(withArray(val))
+	case map[string]interface{}:
+		return newPacketDataObject(withObjectMap(val))
 	case io.ReadWriter:
 		return val
 	default:
 		return readWriteErr{ErrInvalidPacketType.F(val)}
+	}
+}
+
+// newPacketDataArray returns a new array with the default values.
+func newPacketDataArray(opts ...func(pd *packetDataArray)) *packetDataArray {
+	pd := &packetDataArray{marshalBinary: defaultMarshalBinaryData, unmarshalBinary: json.Unmarshal}
+	for _, opt := range opts {
+		opt(pd)
+	}
+	return pd
+}
+
+func withArray(x []interface{}) func(pd *packetDataArray) {
+	return func(pd *packetDataArray) {
+		pd.x = x
+	}
+}
+
+func withArrayMarshal(fn func(int, io.Reader) ([]byte, error)) func(pd *packetDataArray) {
+	return func(pd *packetDataArray) {
+		pd.marshalBinary = fn
+	}
+}
+
+func withArrayUnmarshal(fn func([]byte, interface{}) error) func(pd *packetDataArray) {
+	return func(pd *packetDataArray) {
+		pd.unmarshalBinary = fn
+	}
+}
+
+func newPacketDataObject(opts ...func(pd *packetDataObject)) *packetDataObject {
+	pd := &packetDataObject{marshalBinary: defaultMarshalBinaryData, unmarshalBinary: json.Unmarshal}
+	for _, opt := range opts {
+		opt(pd)
+	}
+	return pd
+}
+
+func withObjectMap(x map[string]interface{}) func(pd *packetDataObject) {
+	return func(pd *packetDataObject) {
+		pd.x = x
+	}
+}
+
+func withObjectMarshal(fn func(int, io.Reader) ([]byte, error)) func(pd *packetDataObject) {
+	return func(pd *packetDataObject) {
+		pd.marshalBinary = fn
+	}
+}
+
+func withObjectUnmarshal(fn func([]byte, interface{}) error) func(pd *packetDataObject) {
+	return func(pd *packetDataObject) {
+		pd.unmarshalBinary = fn
 	}
 }

@@ -11,6 +11,7 @@ import (
 const (
 	ErrOnReadSoBuffer errsPacket = "error reading packet type %s, save for buffer"
 
+	ErrBadRead    errs.String = "bad read of bytes: %w"
 	ErrShortRead  errs.String = "short read"
 	ErrShortWrite errs.String = "short write"
 
@@ -20,12 +21,20 @@ const (
 	ErrPacketDataNotWritable   errs.String = "no data io.writer found"
 	ErrUnexpectedAttachmentEnd errs.String = "unexpected attachment end"
 
-	ErrUnexpectedJSONEnd errs.String = "unexpected end of JSON input"
-	ErrBadMarshal        errs.String = "data marshal: %w"
-	ErrBadUnmarshal      errs.String = "data unmarshal: %w"
-	ErrBadParse          errs.String = "%s int parse: %w"
+	ErrUnexpectedJSONEnd  errs.String = "unexpected end of JSON input"
+	ErrBadMarshal         errs.String = "data marshal: %w"
+	ErrBadUnmarshal       errs.String = "data unmarshal: %w"
+	ErrBadBinaryMarshal   errs.String = "binary data marshal: %w"
+	ErrBadBinaryUnmarshal errs.String = "binary data unmarshal: %w"
+	ErrBadParse           errs.String = "%s int parse: %w"
 
-	ErrInvalidPacketType errs.String = "the data packet type %T does not exist"
+	ErrBinaryDataUnsupported errs.String = "binary data for this version is unsupported"
+	ErrInvalidPacketType     errs.String = "the data packet type %T does not exist"
+
+	ErrBadInitialFieldUnmarshal errs.String = "bad initial unmarshal of packet field data: %w"
+	ErrBadFieldBase64Decode     errs.String = "bad base64 decode of field string for msgpack: %w"
+	ErrBadFieldMsgPackDecode    errs.String = "bad msgpack decode of field string for msgpack: %w"
+	ErrBadFieldMsgPackEncode    errs.String = "bad msgpack encode of field string for msgpack: %w"
 )
 
 // errsPacket is an error type that can send back PacketError errors.

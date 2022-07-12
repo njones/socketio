@@ -1,3 +1,5 @@
+// TODO
+
 // Package protocol provides a object representation of a socket.io packet.
 //
 // This package currently supports socket.io version 1 to socket.io version 5. It provides

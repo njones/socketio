@@ -2,23 +2,30 @@ package protocol
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
-	"strconv"
 )
 
 type (
 	packetData       io.ReadWriter
 	packetDataString struct{ x *string }
 	packetDataArray  struct {
-		skipBinary bool
+		marshalBinary   func(int, io.Reader) ([]byte, error)
+		unmarshalBinary func([]byte, interface{}) error
 
 		x []interface{}
 	}
 	packetDataObject struct {
-		skipBinary bool
+		marshalBinary   func(int, io.Reader) ([]byte, error)
+		unmarshalBinary func([]byte, interface{}) error
 
 		x map[string]interface{}
+	}
+
+	packetDataObjectMarshal struct {
+		marshalBinary func(int, io.Reader) ([]byte, error)
+
+		x   map[string]interface{}
+		num int
 	}
 )
 
@@ -76,13 +83,15 @@ func (x *packetDataArray) read(p []byte) (n int, err error) {
 	for j, val := range x.x {
 		var data []byte
 
-		switch val.(type) {
-		case (io.Reader):
-			// TODO(njones) for v2 create msgpack base64'd blob?
-			if x.skipBinary {
-				continue
+		switch v := val.(type) {
+		case io.Reader:
+			if x.marshalBinary == nil {
+				err = ErrBinaryDataUnsupported
+				break // from switch...
 			}
-			data = []byte(fmt.Sprintf(`{"_placeholder":true,"num":%d}`, num))
+			if data, err = x.marshalBinary(num, v); err != nil {
+				return n, ErrBadBinaryMarshal.F(err).KV("array", "binary")
+			}
 			num++
 		default:
 			if data, err = json.Marshal(val); err != nil {
@@ -101,6 +110,9 @@ func (x *packetDataArray) read(p []byte) (n int, err error) {
 		n += nx
 
 		if nx < len(data) {
+			if err != nil {
+				return n, ErrOnReadSoBuffer.BufferF("binary data array", data[nx:], err, ErrShortRead)
+			}
 			return n, ErrOnReadSoBuffer.BufferF("binary data array", data[nx:], ErrShortRead)
 		}
 	}
@@ -113,11 +125,13 @@ func (x *packetDataArray) Write(p []byte) (n int, err error) {
 		return
 	}
 
-	n, err = len(p), json.Unmarshal(p, &x.x)
-	if err != nil {
-		ErrBadUnmarshal.F(err).KV("array", "binary")
+	if x.unmarshalBinary != nil {
+		n, err = len(p), x.unmarshalBinary(p, &x.x)
+		if err != nil {
+			ErrBadUnmarshal.F(err).KV("array", "binary")
+		}
 	}
-	// TODO(njones): for v2 loop thorugh base64/msgpack decode binary blobs
+
 	return n, err
 }
 
@@ -131,7 +145,7 @@ func (x *packetDataObject) Read(p []byte) (n int, err error) {
 		return 0, ErrOnReadSoBuffer.BufferF("binary data object", []byte("{}"), ErrEmptyDataArray)
 	}
 
-	data, err := json.Marshal(packetDataObjectJSON{m: x.x})
+	data, err := json.Marshal(packetDataObjectMarshal{x: x.x, marshalBinary: x.marshalBinary})
 	if err != nil {
 		return n, ErrBadMarshal.F(err).KV("object", "binary")
 	}
@@ -150,51 +164,47 @@ func (x *packetDataObject) Write(p []byte) (n int, err error) {
 		return
 	}
 
-	n, err = len(p), json.Unmarshal(p, &x.x)
-	if err != nil {
-		ErrBadUnmarshal.F(err).KV("object", "binary")
+	if x.unmarshalBinary != nil {
+		n, err = len(p), x.unmarshalBinary(p, &x.x)
+		if err != nil {
+			ErrBadUnmarshal.F(err).KV("object", "binary")
+		}
 	}
 
-	// TODO(njones): for v2 loop through base64/msgpack decode binary blobs
 	return n, err
 }
 
-type packetDataObjectJSON struct {
-	skipBinary bool
-
-	n int
-	m map[string]interface{}
-}
-
-func (o packetDataObjectJSON) MarshalJSON() ([]byte, error) {
+func (o packetDataObjectMarshal) MarshalJSON() ([]byte, error) {
 	var i int
 	var out = []byte("{")
 
-	for key, val := range o.m {
+	for key, val := range o.x {
 		if i > 0 {
 			out = append(out, ',')
 		}
 		out = append(out, `"`+key+`":`...)
 		switch v := val.(type) {
 		case io.Reader:
-			if o.skipBinary {
-				out = append(out, `{}`...)
-				break
+			if o.marshalBinary != nil {
+				b, err := o.marshalBinary(o.num, v)
+				if err != nil {
+					return nil, err
+				}
+				out = append(out, b...)
 			}
-			out = append(out, `{_placeholder":true,"num":`+strconv.Itoa(o.n)+`}`...)
-			o.n++
+			o.num++
 		case map[string]interface{}:
-			j, e := json.Marshal(packetDataObjectJSON{n: o.n, m: v})
-			if e != nil {
-				return nil, e
+			b, err := json.Marshal(packetDataObjectMarshal{num: o.num, x: v, marshalBinary: o.marshalBinary})
+			if err != nil {
+				return nil, err
 			}
-			out = append(out, j...)
+			out = append(out, b...)
 		default:
-			j, e := json.Marshal(v)
-			if e != nil {
-				return nil, e
+			b, err := json.Marshal(v)
+			if err != nil {
+				return nil, err
 			}
-			out = append(out, j...)
+			out = append(out, b...)
 		}
 		i++
 	}

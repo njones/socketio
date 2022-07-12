@@ -41,7 +41,7 @@ AckIDNumber:
 		switch val {
 		case '1', '2', '3', '4', '5', '6', '7', '8', '9', '0':
 			data = append(data, val)
-		case '[', '"':
+		case '[', '{', '"':
 			n-- // because we don't want to keep this character in our output, let it live for another day...
 			if n == 0 {
 				return 0, nil

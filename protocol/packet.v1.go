@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/json"
 	"io"
 )
 
@@ -32,6 +33,19 @@ func NewPacketV1() Packet {
 
 func (pac *PacketV1) init() {
 	pac.packet.ket = func() Packet { return pac }
+}
+
+func (pac *PacketV1) WithData(x interface{}) Packet {
+	pac.packet.WithData(x)
+	switch pac.packet.Data.(type) {
+	case *packetDataArray:
+		pac.packet.Data.(*packetDataArray).marshalBinary = nil
+		pac.packet.Data.(*packetDataArray).unmarshalBinary = packetDataArrayUnmarshalV1
+	case *packetDataObject:
+		pac.packet.Data.(*packetDataObject).marshalBinary = packetDataObjectMarshalV1
+		pac.packet.Data.(*packetDataObject).unmarshalBinary = packetDataObjectUnmarshalV1
+	}
+	return pac
 }
 
 //
@@ -149,9 +163,8 @@ func writeDataToPacketV1(w io.Writer) writeStateFn {
 				return writeDataStringToPacket(w)(p)
 			case '[':
 				if w == nil {
-					w = &packetDataArray{
-						skipBinary: true,
-					}
+					w = newPacketDataArray(withArrayMarshal(nil),
+						withArrayUnmarshal(packetDataArrayUnmarshalV1))
 					defer func() {
 						scr.data.set(packetData(w.(io.ReadWriter)))
 					}()
@@ -161,9 +174,8 @@ func writeDataToPacketV1(w io.Writer) writeStateFn {
 
 			case '{':
 				if w == nil {
-					w = &packetDataObject{
-						skipBinary: true,
-					}
+					w = newPacketDataObject(withObjectMarshal(packetDataObjectMarshalV1),
+						withObjectUnmarshal(packetDataObjectUnmarshalV1))
 					defer func() {
 						scr.data.set(packetData(w.(io.ReadWriter)))
 					}()
@@ -175,4 +187,24 @@ func writeDataToPacketV1(w io.Writer) writeStateFn {
 			return nil
 		}
 	}
+}
+
+func packetDataArrayUnmarshalV1(data []byte, v interface{}) error {
+	err := json.Unmarshal(data, v)
+	if err != nil {
+		return ErrBinaryDataUnsupported
+	}
+	return nil
+}
+
+func packetDataObjectMarshalV1(_ int, v io.Reader) ([]byte, error) {
+	return json.Marshal(v)
+}
+
+func packetDataObjectUnmarshalV1(data []byte, v interface{}) error {
+	err := json.Unmarshal(data, v)
+	if err != nil {
+		return ErrBinaryDataUnsupported
+	}
+	return nil
 }

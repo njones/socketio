@@ -72,13 +72,15 @@ func (pac *packet) GetNamespace() string { return string(pac.Namespace) }
 // GetAckID returns the underlining string type for a socket.io packet AckID
 func (pac *packet) GetAckID() uint64 { return uint64(pac.AckID) }
 
-// GetAckID returns the underlining data string/array type for a socket.io packet Data
+// GetData returns the underlining data string/array type for a socket.io packet Data
 func (pac *packet) GetData() interface{} {
 	switch val := pac.Data.(type) {
 	case *packetDataString:
 		return val.x // unwrap and return the string
 	case *packetDataArray:
 		return val.x // unwrap and return the array
+	case *packetDataObject:
+		return val.x // unwrap and return the object map
 	}
 	return pac.Data // returns the encapsulated, possibly wrapped data
 }
