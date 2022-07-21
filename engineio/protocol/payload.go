@@ -26,17 +26,3 @@ type reader struct {
 	*rw.Reader
 	err error
 }
-
-// func (rp *readPayload) ReadString(delim byte) (str string) {
-// 	if rp.err != nil {
-// 		return ""
-// 	}
-// 	str, rp.err = rp.r.ReadString(delim)
-// 	return str
-// }
-
-// func (rp *readPayload) StrToInt(str string, cutset string) (n int64) {
-// 	strInt := strings.Trim(str, cutset)
-// 	n, rp.err = strconv.ParseInt(strInt, 10, 64)
-// 	return n
-// }
