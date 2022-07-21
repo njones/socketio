@@ -3,8 +3,40 @@
 
 package protocol
 
+import (
+	"math"
+)
+
 type HandshakeV2 struct {
 	SID         string   `json:"sid"`
 	Upgrades    []string `json:"upgrades"`
 	PingTimeout Duration `json:"pingTimeout"`
+}
+
+func (h *HandshakeV2) Len() int {
+	var n int
+	if h == nil {
+		h = new(HandshakeV2)
+	}
+	n += emptyBracketsLength
+	n += emptySIDLength
+	n += commaLength
+	n += emptyUpgradesLength
+	n += commaLength
+	n += pingTimeoutKeyLength
+	n += 1 // for the next calculation even if 0
+
+	// Now the data
+	if h.PingTimeout > 0 {
+		n += int(math.Floor(math.Log10(float64(h.PingTimeout))))
+	}
+	n += len(h.SID)
+	for i, v := range h.Upgrades {
+		if i > 0 {
+			n += commaLength
+		}
+		n += emptyStringLength
+		n += len(v)
+	}
+	return n
 }

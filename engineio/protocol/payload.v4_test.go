@@ -8,83 +8,133 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestPayloadEncodeV4(t *testing.T) {
-	type want struct {
-		string
-		error
-	}
-	var tests = []struct {
-		name string
-		data PayloadV4
-		want want
-	}{
-		{
-			name: "no binary",
-			data: []PacketV4{
-				{Packet: Packet{T: MessagePacket, D: "hello"}},
-				{Packet: Packet{T: MessagePacket, D: "€"}},
-			},
-			want: want{error: nil, string: "4hello\x1e4€"},
+func TestReadPayloadV4(t *testing.T) {
+	var opts []testoption
+
+	runWithOptions := map[string]func(opts ...testoption) func(string, PayloadV4, bool, error) func(*testing.T){
+		".Decode": func(opts ...testoption) func(string, PayloadV4, bool, error) func(*testing.T) {
+			return func(data string, want PayloadV4, isXHR2 bool, xerr error) func(*testing.T) {
+				return func(t *testing.T) {
+					for _, opt := range opts {
+						opt(t)
+					}
+
+					var have PayloadV4
+					var dec = NewPayloadDecoderV4(strings.NewReader(data))
+					dec.IsXHR2 = isXHR2
+					var err = dec.Decode(&have)
+
+					assert.ErrorIs(t, err, xerr)
+					assert.Equal(t, want, have)
+				}
+			}
 		},
-		{
-			name: "with binary",
-			data: []PacketV4{
-				{Packet: Packet{T: MessagePacket, D: "€"}},
-				{Packet: Packet{T: MessagePacket, D: []byte{1, 2, 3, 4}}},
-			},
-			want: want{error: nil, string: "4€\x1ebAQIDBA=="},
+		".ReadPayload": func(opts ...testoption) func(string, PayloadV4, bool, error) func(*testing.T) {
+			return func(data string, want PayloadV4, isXHR2 bool, xerr error) func(*testing.T) {
+				return func(t *testing.T) {
+					for _, opt := range opts {
+						opt(t)
+					}
+
+					var have PayloadV4
+					var err = NewPayloadDecoderV4.From(strings.NewReader(data)).ReadPayload(&have)
+
+					assert.ErrorIs(t, err, xerr)
+					assert.Equal(t, want, have)
+				}
+			}
 		},
 	}
 
-	buf := new(bytes.Buffer)
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			buf.Reset()
+	spec := map[string]func() (string, PayloadV4, bool, error){
+		"Without Binary": func() (string, PayloadV4, bool, error) {
+			isBinary, isXHR2 := false, false
+			data := "4hello\x1e4€"
+			want := PayloadV4{
+				{PacketV3{Packet{T: MessagePacket, D: "hello"}, isBinary}},
+				{PacketV3{Packet{T: MessagePacket, D: "€"}, isBinary}},
+			}
+			return data, want, isXHR2, nil
+		},
+		"With Binary": func() (string, PayloadV4, bool, error) {
+			isBinary, isXHR2 := true, false
+			data := "4€\x1ebAQIDBA=="
+			want := PayloadV4{
+				{PacketV3{Packet{T: MessagePacket, D: "€"}, false}},
+				{PacketV3{Packet{T: BinaryPacket, D: bytes.NewBuffer([]byte{0x01, 0x02, 0x03, 0x04})}, isBinary}},
+			}
+			return data, want, isXHR2, nil
+		},
+	}
 
-			err := NewPayloadEncoderV4(buf).Encode(test.data)
-
-			assert.Equal(t, test.want.error, err)
-			assert.Equal(t, test.want.string, buf.String())
-		})
+	for name, testing := range spec {
+		for suffix, runWithOption := range runWithOptions {
+			t.Run(name+suffix, runWithOption(opts...)(testing()))
+		}
 	}
 }
 
-func TestPayloadDecodeV4(t *testing.T) {
-	type want struct {
-		pay PayloadV4
-		err error
-	}
-	var tests = []struct {
-		name string
-		data string
-		want want
-	}{
-		{
-			name: "no binary",
-			data: "4hello\x1e4€",
-			want: want{err: nil, pay: []PacketV4{
-				{Packet: Packet{T: MessagePacket, D: "hello"}},
-				{Packet: Packet{T: MessagePacket, D: "€"}},
-			}},
+func TestWritePayloadV4(t *testing.T) {
+	var opts []testoption
+
+	runWithOptions := map[string]func(opts ...testoption) func(PayloadV4, string, bool, error) func(*testing.T){
+		".Encode": func(opts ...testoption) func(PayloadV4, string, bool, error) func(*testing.T) {
+			return func(data PayloadV4, want string, isXHR2 bool, xerr error) func(*testing.T) {
+				return func(t *testing.T) {
+					for _, opt := range opts {
+						opt(t)
+					}
+
+					var have = new(bytes.Buffer)
+					var enc = NewPayloadEncoderV4(have)
+					var err = enc.Encode(data)
+
+					assert.ErrorIs(t, err, xerr)
+					assert.Equal(t, want, have.String())
+				}
+			}
 		},
-		{
-			name: "with binary",
-			data: "4€\x1ebAQIDBA==",
-			want: want{err: nil, pay: []PacketV4{
-				{Packet: Packet{T: MessagePacket, D: "€"}},
-				{Packet: Packet{T: BinaryPacket, D: []byte{1, 2, 3, 4}}, IsBinary: true},
-			}},
+		".WritePayload": func(opts ...testoption) func(PayloadV4, string, bool, error) func(*testing.T) {
+			return func(data PayloadV4, want string, isXHR2 bool, xerr error) func(*testing.T) {
+				return func(t *testing.T) {
+					for _, opt := range opts {
+						opt(t)
+					}
+
+					var have = new(bytes.Buffer)
+					var err = NewPayloadEncoderV4.To(have).WritePayload(data)
+
+					assert.ErrorIs(t, err, xerr)
+					assert.Equal(t, want, have.String())
+				}
+			}
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	spec := map[string]func() (PayloadV4, string, bool, error){
+		"Without Binary": func() (PayloadV4, string, bool, error) {
+			isBinary, isXHR2 := false, false
+			want := "4hello\x1e4€"
+			data := PayloadV4{
+				{PacketV3{Packet{T: MessagePacket, D: "hello"}, isBinary}},
+				{PacketV3{Packet{T: MessagePacket, D: "€"}, isBinary}},
+			}
+			return data, want, isXHR2, nil
+		},
+		"With Binary": func() (PayloadV4, string, bool, error) {
+			isBinary, isXHR2 := true, false
+			want := "4€\x1ebAQIDBA=="
+			data := PayloadV4{
+				{PacketV3{Packet{T: MessagePacket, D: "€"}, false}},
+				{PacketV3{Packet{T: BinaryPacket, D: bytes.NewBuffer([]byte{0x01, 0x02, 0x03, 0x04})}, isBinary}},
+			}
+			return data, want, isXHR2, nil
+		},
+	}
 
-			var pay PayloadV4
-			err := NewPayloadDecoderV4(strings.NewReader(test.data)).Decode(&pay)
-
-			assert.Equal(t, test.want.err, err)
-			assert.Equal(t, test.want.pay, pay)
-		})
+	for name, testing := range spec {
+		for suffix, runWithOption := range runWithOptions {
+			t.Run(name+suffix, runWithOption(opts...)(testing()))
+		}
 	}
 }

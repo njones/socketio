@@ -4,77 +4,43 @@
 package protocol
 
 import (
-	"errors"
-	"fmt"
 	"io"
 	"strconv"
-	"strings"
+
+	rw "github.com/njones/socketio/internal/readwriter"
 )
 
 // PayloadV2 is defined: https://github.com/socketio/engine.io-protocol/tree/v2
 type PayloadV2 []PacketV2
 
-type PayloadDecoderV2 struct{ r io.Reader }
+type PayloadDecoderV2 struct{ read *reader }
 
 var NewPayloadDecoderV2 _payloadDecoderV2 = func(r io.Reader) *PayloadDecoderV2 {
-	return &PayloadDecoderV2{r: r}
+	return &PayloadDecoderV2{read: &reader{Reader: rw.NewReader(r)}}
 }
 
-func (dec *PayloadDecoderV2) Decode(payV2 *PayloadV2) (err error) {
-	if payV2 == nil {
-		payV2 = &PayloadV2{}
+func (dec *PayloadDecoderV2) Decode(payload *PayloadV2) error {
+	if payload == nil {
+		payload = &PayloadV2{}
 	}
 
-	for {
-		var pr = dec.decode(dec.r)
-		var pacV2 PacketV2
+	for dec.read.IsNotErr() {
 
-		if err = NewPacketDecoderV2(pr).Decode(&pacV2); err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			return ErrPayloadDecode.F("v2", err)
+		n := dec.read.packetLen()
+
+		var packet PacketV2
+		if dec.read.IsNotErr() && dec.read.ConditionalErr(NewPacketDecoderV2(dec.read.payload(n)).Decode(&packet)).IsNotErr() {
+			*payload = append(*payload, packet)
 		}
-
-		*payV2 = append(*payV2, pacV2)
 	}
+
+	return dec.read.ConvertErr(io.EOF, nil).Err()
 }
 
-func (dec *PayloadDecoderV2) decode(src io.Reader) io.Reader {
-	var (
-		b    [1]byte
-		numB []byte
-		numI int64
-	)
-
-	for {
-		if _, err := src.Read(b[:]); err != nil {
-			return src
-		}
-		if b[0] == ':' {
-			i, err := strconv.ParseInt(string(numB), 10, 64)
-			if err != nil {
-				return src
-			}
-			numI = i
-			break
-		}
-		numB = append(numB, b[0])
-	}
-
-	pr, pw := io.Pipe()
-	go func() {
-		CopyRuneN(pw, src, numI)
-		pw.Close()
-	}()
-
-	return pr
-}
-
-type PayloadEncoderV2 struct{ w io.Writer }
+type PayloadEncoderV2 struct{ write *rw.Writer }
 
 var NewPayloadEncoderV2 _payloadEncoderV2 = func(w io.Writer) *PayloadEncoderV2 {
-	return &PayloadEncoderV2{w: w}
+	return &PayloadEncoderV2{write: rw.NewWriter(w)}
 }
 
 func (enc *PayloadEncoderV2) Encode(payload PayloadV2) error {
@@ -86,14 +52,34 @@ func (enc *PayloadEncoderV2) Encode(payload PayloadV2) error {
 	return nil
 }
 
-func (enc *PayloadEncoderV2) encode(packet PacketV2) error {
-	var buf = new(strings.Builder)
-	if err := NewPacketEncoderV2(buf).Encode(packet); err != nil {
+func (enc *PayloadEncoderV2) encode(packet PacketV2) (err error) {
+
+	if err = enc.writePacketLen(packet.Packet); err != nil {
+		return err
+	}
+	return enc.writePacket(packet)
+}
+
+func (enc *PayloadEncoderV2) writePacketLen(packet Packet) (err error) {
+	messageTypeLen := len(packet.T.Bytes())
+	switch data := packet.D.(type) {
+	case string:
+		enc.write.Bytes([]byte(strconv.Itoa(len([]rune(data))+messageTypeLen))).OnErrF(ErrPayloadEncode, "v2", enc.write.Err())
+	case []byte:
+		enc.write.Bytes([]byte(strconv.Itoa(len(data)+messageTypeLen))).OnErrF(ErrPayloadEncode, "v2", enc.write.Err())
+	case useLen:
+		enc.write.Bytes([]byte(strconv.Itoa(data.Len()+messageTypeLen))).OnErrF(ErrPayloadEncode, "v2", enc.write.Err())
+	default:
+		enc.write.Bytes([]byte(strconv.Itoa(messageTypeLen))).OnErrF(ErrPayloadEncode, "v2", enc.write.Err())
+	}
+	enc.write.Byte(':').OnErr(ErrPayloadEncode)
+
+	return enc.write.Err()
+}
+
+func (enc *PayloadEncoderV2) writePacket(packet PacketV2) (err error) {
+	if err := NewPacketEncoderV2(enc.write).Encode(packet); err != nil {
 		return ErrPayloadEncode.F("v2", err)
 	}
-	str := buf.String()
-	if _, err := fmt.Fprintf(enc.w, "%d:%s", len([]rune(str)), str); err != nil {
-		return ErrPayloadEncode.F("v2", err)
-	}
-	return nil
+	return enc.write.Err()
 }

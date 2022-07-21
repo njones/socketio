@@ -26,7 +26,7 @@ func (d Duration) MarshalJSON() (b []byte, err error) {
 type stripLastNewlineWriter struct{ w io.Writer }
 
 func (snw *stripLastNewlineWriter) Write(p []byte) (n int, err error) {
-	if n = len(p) - 1; p[n] != '\n' { // assumes this is not in the middle of a read...
+	if n = len(p) - 1; p[n] != '\n' { // assumes this is not in the middle of a write...
 		n++
 	}
 	return snw.w.Write(p[:n])
