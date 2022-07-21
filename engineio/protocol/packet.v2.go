@@ -4,108 +4,102 @@
 package protocol
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
+
+	rw "github.com/njones/socketio/internal/readwriter"
 )
 
 type PacketV2 struct{ Packet }
 
-type PacketDecoderV2 struct{ r io.Reader }
+type PacketDecoderV2 struct {
+	read *rw.Reader
+}
 
-var NewPacketDecoderV2 _packetDecoderV2 = func(r io.Reader) *PacketDecoderV2 { return &PacketDecoderV2{r: r} }
+var NewPacketDecoderV2 _packetDecoderV2 = func(r io.Reader) *PacketDecoderV2 {
+	return &PacketDecoderV2{read: rw.NewReader(r)}
+}
 
 func (dec *PacketDecoderV2) Decode(packet *PacketV2) error {
 	if packet == nil {
 		packet = &PacketV2{}
 	}
 
-	// check if packet is the default type...
-	if packet.T == 0 {
-		if _, err := io.CopyN(&packet.T, dec.r, 1); err != nil {
-			if errors.Is(err, io.EOF) {
-				return err
-			}
-			return ErrPacketDecode.F("v2", err)
+	if packet.T == 0 && !packet.isOpenPacket {
+		if dec.read.IsNotErr() && dec.read.ConditionalErr(dec.readPacketType(&packet.T, dec.read)).IsNotErr() {
+			packet.isOpenPacket = (packet.T == 0)
+			defer func() { packet.isOpenPacket = false }() // always clear at the end...
 		}
 	}
 
-	switch packet.T {
+	switch packetType := packet.T; packetType {
 	case OpenPacket:
 		var data HandshakeV2
-		if err := json.NewDecoder(dec.r).Decode(&data); err != nil {
-			return ErrHandshakeDecode.F("v2", err)
-		}
-		packet.D = data
+		dec.read.Decoder(newJSONDecoder()).Decode(&data).OnErrF(ErrHandshakeDecode, "v2", dec.read.Err())
+		packet.D = &data
 	case MessagePacket:
-		var data, err = io.ReadAll(dec.r)
-		if err != nil {
-			return ErrPacketDecode.F("v2", err)
-		}
-		packet.D = string(data)
+		var data = new(strings.Builder)
+		dec.read.Copy(data).OnErrF(ErrPacketDecode, "v2", dec.read.Err())
+		packet.D = data.String()
 	case PingPacket, PongPacket:
 		var data = new(strings.Builder)
-		if _, err := io.Copy(data, dec.r); err != nil {
-			return ErrPacketDecode.F("v2", err)
-		}
+		dec.read.Copy(data).OnErrF(ErrPacketDecode, "v2", dec.read.Err())
 		if data.Len() > 0 {
 			packet.D = data.String()
 		}
+	case ClosePacket, UpgradePacket, NoopPacket:
+		var data = new(strings.Builder)
+		dec.read.Copy(data).OnErrF(ErrPacketDecode, "v2", dec.read.Err())
+	default:
+		return fmt.Errorf("bad packet type: %T", packetType)
 	}
 
-	return nil
+	return dec.read.Err()
 }
 
-type PacketEncoderV2 struct{ w io.Writer }
+func (dec *PacketDecoderV2) readPacketType(packet io.Writer, r io.Reader) error {
+	dec.read.CopyN(packet, 1).OnErrF(ErrPacketDecode, "v2", dec.read.Err())
+	return dec.read.Err()
+}
 
-var NewPacketEncoderV2 _packetEncoderV2 = func(w io.Writer) *PacketEncoderV2 { return &PacketEncoderV2{w: w} }
+type PacketEncoderV2 struct{ write *rw.Writer }
+
+var NewPacketEncoderV2 _packetEncoderV2 = func(w io.Writer) *PacketEncoderV2 {
+	return &PacketEncoderV2{write: rw.NewWriter(w)}
+}
 
 func (enc *PacketEncoderV2) Encode(packet PacketV2) (err error) {
 	switch packet.T {
 	case OpenPacket:
-		switch val := packet.D.(type) {
-		case *HandshakeV2:
-			if val.Upgrades == nil {
-				val.Upgrades = []string{}
+		switch data := packet.D.(type) {
+		case *HandshakeV2: // must be a pointer so we can set our upgrades
+			if data.Upgrades == nil {
+				data.Upgrades = []string{}
 			}
-			if _, err := enc.w.Write(packet.T.Bytes()); err != nil {
-				return ErrHandshakeEncode.F("v2", err)
-			}
-			if err := json.NewEncoder(&stripLastNewlineWriter{enc.w}).Encode(val); err != nil {
-				return ErrHandshakeEncode.F("v2", err)
-			}
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrHandshakeEncode, "v2", enc.write.Err())
+			enc.write.Encoder(newJSONEncoder()).Encode(data).OnErrF(ErrHandshakeEncode, "v2", enc.write.Err())
 		default:
 			return ErrInvalidHandshake.F("v2")
 		}
 	case MessagePacket, PingPacket, PongPacket:
-		switch val := packet.D.(type) {
+		switch data := packet.D.(type) {
 		case nil:
-			if _, err := enc.w.Write(packet.T.Bytes()); err != nil {
-				return ErrPacketEncode.F("v2", err)
-			}
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
 		case string:
-			if _, err := enc.w.Write(append(packet.T.Bytes(), val...)); err != nil {
-				return ErrPacketEncode.F("v2", err)
-			}
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+			enc.write.String(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
 		case io.WriterTo:
-			if _, err := enc.w.Write(packet.T.Bytes()); err != nil {
-				return ErrPacketEncode.F("v2", err)
-			}
-			if _, err := val.WriteTo(enc.w); err != nil {
-				return ErrPacketEncode.F("v2", err)
-			}
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+			enc.write.To(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
 		default:
-			return ErrInvalidPacketData.F(fmt.Sprintf("unexpected data type of: %T", val))
+			return ErrInvalidPacketData.F(fmt.Sprintf("unexpected data type of: %T", data))
 		}
 	case ClosePacket, UpgradePacket, NoopPacket:
-		if _, err := enc.w.Write(packet.T.Bytes()); err != nil {
-			return ErrPacketEncode.F("v2", err)
-		}
+		enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
 	default:
-		return ErrInvalidPacketType.F(fmt.Sprintf("unexpected type of %s", packet.T))
+		return ErrInvalidPacketType.F(fmt.Sprintf("unexpected packet type of: %s", packet.T))
 	}
 
-	return nil
+	return enc.write.Err()
 }

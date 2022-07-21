@@ -3,31 +3,74 @@
 
 package protocol
 
-import "io"
+import (
+	"io"
+)
+
+func (pay PayloadV3) PayloadVal() Payload {
+	rtn := make(Payload, len(pay))
+	for i, v := range pay {
+		if v.IsBinary {
+			v.Packet.D = isBinaryPacket{D: v.Packet.D}
+		}
+		rtn[i] = v.Packet
+	}
+	return rtn
+}
+
+func (pay *PayloadV3) PayloadRef() *Payload { return &Payload{} }
 
 type _payloadDecoderV3 func(r io.Reader) *PayloadDecoderV3
 type _payloadEncoderV3 func(w io.Writer) *PayloadEncoderV3
 type _payloadReaderV3 func(pay *PayloadV3) (err error)
 type _payloadWriterV3 func(pay PayloadV3) (err error)
 
+func (pay _payloadEncoderV3) SetXHR2(isXHR2 bool) _payloadEncoderV3 {
+	return func(w io.Writer) *PayloadEncoderV3 {
+		enc := pay(w)
+		enc.IsXHR2 = isXHR2
+		return enc
+	}
+}
+
+func (pay _payloadDecoderV3) SetXHR2(isXHR2 bool) _payloadDecoderV3 {
+	return func(r io.Reader) *PayloadDecoderV3 {
+		dec := pay(r)
+		dec.IsXHR2 = isXHR2
+		return dec
+	}
+}
+
 func (pay _payloadDecoderV3) From(r io.Reader) PayloadReader { return _payloadReaderV3(pay(r).Decode) }
 func (pay _payloadEncoderV3) To(w io.Writer) PayloadWriter   { return _payloadWriterV3(pay(w).Encode) }
-func (pay _payloadReaderV3) ReadPayload(payload PayloadRef) error {
+func (pay _payloadReaderV3) ReadPayload(payload PayloadRef) (err error) {
 	var pay3 PayloadV3
-	if err := pay(&pay3); err != nil {
+	if err = pay(&pay3); err != nil {
 		return err
 	}
-	payRef := make([]Packet, len(pay3))
-	for i, v := range pay3 {
-		payRef[i] = v.Packet
+
+	switch pay := payload.(type) {
+	case *Payload:
+		payRef := make([]Packet, len(pay3))
+		for i, v := range pay3 {
+			payRef[i] = v.Packet
+		}
+		*pay = payRef
+	case *PayloadV3:
+		*pay = pay3
 	}
-	*payload.PayloadRef() = payRef
+
 	return nil
 }
 func (pay _payloadWriterV3) WritePayload(payload PayloadVal) error {
 	pay3 := make(PayloadV3, len(payload.PayloadVal()))
 	for i, v := range payload.PayloadVal() {
-		pay3[i] = PacketV3{Packet: v}
+		var isBinary bool
+		if binaryData, ok := v.D.(isBinaryPacket); ok {
+			v.D = binaryData.D
+			isBinary = true
+		}
+		pay3[i] = PacketV3{Packet: v, IsBinary: isBinary}
 	}
 	return pay(pay3)
 }

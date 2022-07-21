@@ -1,9 +1,9 @@
+//go:build gc || eio_pac_v3
+
 package protocol
 
 import (
 	"bytes"
-	"fmt"
-	"io"
 	"strings"
 	"testing"
 	"time"
@@ -11,257 +11,231 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestPacketV3DecodingSadPath(t *testing.T) {
+func TestReadPacketV3(t *testing.T) {
+	var opts []testoption
 
-	var tests = []struct {
-		name string
-		bBin bool
-		data io.Reader
-		want error
-	}{
-		{
-			name: "[open]",
-			data: strings.NewReader(`0{"sid":`),
-			want: ErrHandshakeDecode,
+	runWithOptions := map[string]func(opts ...testoption) func(string, bool, PacketV3, error) func(*testing.T){
+		".Decode": func(opts ...testoption) func(string, bool, PacketV3, error) func(*testing.T) {
+			return func(data string, isBin bool, want PacketV3, xerr error) func(*testing.T) {
+				return func(t *testing.T) {
+					for _, opt := range opts {
+						opt(t)
+					}
+
+					var have = PacketV3{IsBinary: isBin}
+					var err = NewPacketDecoderV3(strings.NewReader(data)).Decode(&have)
+
+					assert.ErrorIs(t, err, xerr)
+					assert.Equal(t, want, have)
+				}
+			}
 		},
-		{
-			name: "[unknown]",
-			data: &sadReadWriter{data: []byte(`x`), err: fmt.Errorf("bad connection")},
-			want: ErrPacketDecode,
-		},
-		{
-			name: "[message]",
-			data: &sadReadWriter{data: []byte(`4Hello`), err: fmt.Errorf("bad connection")},
-			want: ErrPacketDecode,
-		},
-		{
-			name: "[message] binary",
-			bBin: true,
-			data: &sadReadWriter{data: []byte(`4Hello`), err: fmt.Errorf("bad connection")},
-			want: ErrPacketDecode,
-		},
-		{
-			name: "[ping/pong]",
-			data: &sadReadWriter{data: []byte(`2Hello`), err: fmt.Errorf("bad connection")},
-			want: ErrPacketDecode,
-		},
-		{
-			name: "[message] skip sad on io.EOF",
-			data: &sadReadWriter{data: []byte(`4HelloWorld`), err: io.EOF},
-			want: nil,
+		".ReadPacket": func(opts ...testoption) func(string, bool, PacketV3, error) func(*testing.T) {
+			return func(data string, isBin bool, want PacketV3, xerr error) func(*testing.T) {
+				return func(t *testing.T) {
+					for _, opt := range opts {
+						opt(t)
+					}
+
+					var decoder _packetDecoderV3 = NewPacketDecoderV3
+
+					var have = PacketV3{IsBinary: isBin}
+					var err = decoder.From(strings.NewReader(data)).ReadPacket(&have)
+
+					assert.ErrorIs(t, err, xerr)
+					assert.Equal(t, want, have)
+				}
+			}
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t2 *testing.T) {
-			err := NewPacketDecoderV3(test.data).Decode(&PacketV3{IsBinary: test.bBin})
-			assert.ErrorIs(t2, err, test.want)
-		})
+	spec := map[string]func() (string, bool, PacketV3, error){
+		"Open": func() (string, bool, PacketV3, error) {
+			var isBin bool
+			data := `0{"sid":"abc123","upgrades":[],"pingTimeout":300,"pingInterval":5000}`
+			want := PacketV3{
+				Packet: Packet{
+					T: OpenPacket,
+					D: HandshakeV3{
+						HandshakeV2:  HandshakeV2{SID: "abc123", Upgrades: []string{}, PingTimeout: Duration(300 * time.Millisecond)},
+						PingInterval: Duration(5000 * time.Millisecond),
+					},
+				},
+				IsBinary: false,
+			}
+			return data, isBin, want, nil
+		},
+		"Close": func() (string, bool, PacketV3, error) {
+			var isBin bool
+			data := `1`
+			want := PacketV3{Packet{T: ClosePacket, D: nil}, false}
+			return data, isBin, want, nil
+		},
+		"Ping": func() (string, bool, PacketV3, error) {
+			var isBin bool
+			data := `2`
+			want := PacketV3{Packet{T: PingPacket, D: nil}, false}
+			return data, isBin, want, nil
+		},
+		"Pong with Text": func() (string, bool, PacketV3, error) {
+			var isBin bool
+			data := `3probe`
+			want := PacketV3{Packet{T: PongPacket, D: "probe"}, false}
+			return data, isBin, want, nil
+		},
+		"Message": func() (string, bool, PacketV3, error) {
+			var isBin bool
+			data := `4HelloWorld`
+			want := PacketV3{Packet{T: MessagePacket, D: "HelloWorld"}, false}
+			return data, isBin, want, nil
+		},
+		"Message with Binary": func() (string, bool, PacketV3, error) {
+			var isBin bool
+			data := "4\x00\x01\x02\x03\x04\x05"
+			want := PacketV3{Packet{T: MessagePacket, D: "\x00\x01\x02\x03\x04\x05"}, false}
+			return data, isBin, want, nil
+		},
+		"Upgrade": func() (string, bool, PacketV3, error) {
+			var isBin bool
+			data := `5`
+			want := PacketV3{Packet{T: UpgradePacket, D: nil}, false}
+			return data, isBin, want, nil
+		},
+		"NOOP": func() (string, bool, PacketV3, error) {
+			var isBin bool
+			data := `6`
+			want := PacketV3{Packet{T: NoopPacket, D: nil}, false}
+			return data, isBin, want, nil
+		},
+	}
+
+	extra := map[string]func() (string, bool, PacketV3, error){
+		"Message with Binary": func() (string, bool, PacketV3, error) {
+			var isBin = true
+			data := "4\x00\x01\x02\x03\x04\x05"
+			want := PacketV3{Packet{T: MessagePacket, D: bytes.NewReader([]byte("\x00\x01\x02\x03\x04\x05"))}, true}
+			return data, isBin, want, nil
+		},
+	}
+
+	for name, testing := range spec {
+		for suffix, runWithOption := range runWithOptions {
+			t.Run(name+suffix, runWithOption(opts...)(testing()))
+		}
+	}
+
+	for name, testing := range extra {
+		for suffix, runWithOption := range runWithOptions {
+			t.Run(name+suffix, runWithOption(opts...)(testing()))
+		}
 	}
 }
 
-func TestPacketV3Decoding(t *testing.T) {
-	type want struct {
-		PacketV3
-		error
-	}
-	var tests = []struct {
-		name string
-		data string
-		null bool
-		want want
-	}{
-		{
-			name: "[open]",
-			data: `0{"sid":"abc123","upgrades":[],"pingTimeout":5000}`,
-			null: true,
-			want: want{error: nil, PacketV3: PacketV3{Packet: Packet{
-				T: OpenPacket,
-				D: HandshakeV3{HandshakeV2: HandshakeV2{SID: "abc123", Upgrades: []string{}, PingTimeout: Duration(5000 * time.Millisecond)}},
-			}}},
-		},
-		{
-			name: "[close]",
-			data: `1`,
-			want: want{error: nil, PacketV3: PacketV3{Packet: Packet{
-				T: ClosePacket,
-				D: nil,
-			}}},
-		},
-		{
-			name: "[ping]",
-			data: `2`,
-			null: true,
-			want: want{error: nil, PacketV3: PacketV3{Packet: Packet{
-				T: PingPacket,
-				D: nil,
-			}}},
-		},
-		{
-			name: "[pong]",
-			data: `3probe`,
-			want: want{error: nil, PacketV3: PacketV3{Packet: Packet{
-				T: PongPacket,
-				D: "probe",
-			}}},
-		},
-		{
-			name: "[message]",
-			data: `4HelloWorld`,
-			null: true,
-			want: want{error: nil, PacketV3: PacketV3{Packet: Packet{
-				T: MessagePacket,
-				D: "HelloWorld",
-			}}},
-		},
-		{
-			name: "[upgrade]",
-			data: `5`,
-			want: want{error: nil, PacketV3: PacketV3{Packet: Packet{
-				T: UpgradePacket,
-				D: nil,
-			}}},
-		},
-		{
-			name: "[noop]",
-			data: `6`,
-			null: true,
-			want: want{error: nil, PacketV3: PacketV3{Packet: Packet{
-				T: NoopPacket,
-				D: nil,
-			}}},
-		},
-	}
+func TestWritePacketV3(t *testing.T) {
+	var opts []testoption
 
-	var decoder _packetDecoderV3 = NewPacketDecoderV3
+	runWithOptions := map[string]func(opts ...testoption) func(PacketV3, string, error) func(*testing.T){
+		".Encode": func(opts ...testoption) func(PacketV3, string, error) func(*testing.T) {
+			return func(data PacketV3, want string, xerr error) func(*testing.T) {
+				return func(t *testing.T) {
+					for _, opt := range opts {
+						opt(t)
+					}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			var buf = strings.NewReader(test.data)
-			{
-				var pkt PacketV3
-				if !test.null {
-					pkt = PacketV3{} // not nil
+					var have = new(bytes.Buffer)
+					var err = NewPacketEncoderV3(have).Encode(data)
+
+					assert.ErrorIs(t, err, xerr)
+					assert.Equal(t, want, have.String())
 				}
-				err := NewPacketDecoderV3(buf).Decode(&pkt)
-
-				assert.ErrorIs(t, err, test.want.error)
-				assert.Equal(t, test.want.PacketV3, pkt)
 			}
+		},
+		".WritePacket": func(opts ...testoption) func(PacketV3, string, error) func(*testing.T) {
+			return func(data PacketV3, want string, xerr error) func(*testing.T) {
+				return func(t *testing.T) {
+					for _, opt := range opts {
+						opt(t)
+					}
 
-			buf.Reset(test.data)
-			{
-				var pkt PacketV3
-				if !test.null {
-					pkt = PacketV3{} // not nil
+					var encoder _packetEncoderV3 = NewPacketEncoderV3
+
+					var have = new(bytes.Buffer)
+					var err = encoder.To(have).WritePacket(data)
+
+					assert.ErrorIs(t, err, xerr)
+					assert.Equal(t, want, have.String())
 				}
-				err := decoder.From(buf).ReadPacket(&pkt)
-
-				assert.ErrorIs(t, err, test.want.error)
-				assert.Equal(t, test.want.PacketV3, pkt)
 			}
-		})
-	}
-}
-
-func TestPacketV3Encoding(t *testing.T) {
-	type writerTo string
-	type want struct {
-		string
-		error
-	}
-	var tests = []struct {
-		name string
-		kind PacketType
-		data interface{}
-		want want
-	}{
-		{
-			name: "[open] no upgrades.",
-			kind: OpenPacket,
-			data: HandshakeV3{HandshakeV2: HandshakeV2{SID: "abc123", PingTimeout: Duration(5000 * time.Millisecond)}, PingInterval: Duration(5000 * time.Millisecond)},
-			want: want{error: nil, string: `0{"sid":"abc123","upgrades":[],"pingTimeout":5000,"pingInterval":5000}`},
-		},
-		{
-			name: "[open] with upgrades",
-			kind: OpenPacket,
-			data: HandshakeV3{HandshakeV2: HandshakeV2{SID: "abc123", Upgrades: []string{"polling"}, PingTimeout: Duration(5000 * time.Millisecond)}, PingInterval: Duration(5000 * time.Millisecond)},
-			want: want{error: nil, string: `0{"sid":"abc123","upgrades":["polling"],"pingTimeout":5000,"pingInterval":5000}`},
-		},
-		{
-			name: "[close]",
-			kind: ClosePacket,
-			want: want{error: nil, string: `1`},
-		},
-		{
-			name: "[ping]",
-			kind: PingPacket,
-			want: want{error: nil, string: `2`},
-		},
-		{
-			name: "[pong]",
-			kind: PongPacket,
-			data: "probe",
-			want: want{error: nil, string: `3probe`},
-		},
-		{
-			name: "[message]",
-			kind: MessagePacket,
-			data: "HelloWorld",
-			want: want{error: nil, string: `4HelloWorld`},
-		},
-		{
-			name: "[message]",
-			kind: MessagePacket,
-			data: writerTo("HelloWorld"),
-			want: want{error: nil, string: `4HelloWorld`},
-		},
-		{
-			name: "[upgrade]",
-			kind: UpgradePacket,
-			want: want{error: nil, string: `5`},
-		},
-		{
-			name: "[noop]",
-			kind: NoopPacket,
-			want: want{error: nil, string: `6`},
-		},
-		{
-			name: "[binary]",
-			kind: PacketType(20),
-			want: want{error: ErrInvalidPacketType, string: ``},
 		},
 	}
 
-	var encoder _packetEncoderV3 = NewPacketEncoderV3
+	type params func() (PacketV3, string, error)
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			var buf = new(bytes.Buffer)
-			{
-				var data = test.data
-				if _data, ok := test.data.(writerTo); ok {
-					data = strings.NewReader(string(_data))
-				}
-				var pkt = Packet{T: test.kind, D: data}
-				var err = NewPacketEncoderV3(buf).Encode(PacketV3{Packet: pkt})
-
-				assert.ErrorIs(t, err, test.want.error)
-				assert.Equal(t, test.want.string, buf.String())
+	spec := map[string]params{
+		"Open": func() (PacketV3, string, error) {
+			want := `0{"sid":"abc123","upgrades":[],"pingTimeout":300,"pingInterval":5000}`
+			data := PacketV3{
+				Packet: Packet{
+					T: OpenPacket,
+					D: HandshakeV3{
+						HandshakeV2:  HandshakeV2{SID: "abc123", Upgrades: []string{}, PingTimeout: Duration(300 * time.Millisecond)},
+						PingInterval: Duration(5000 * time.Millisecond),
+					},
+				},
+				IsBinary: false,
 			}
+			return data, want, nil
+		},
+		"Close": func() (PacketV3, string, error) {
+			want := `1`
+			data := PacketV3{Packet{T: ClosePacket, D: nil}, false}
+			return data, want, nil
+		},
+		"Ping": func() (PacketV3, string, error) {
+			data := PacketV3{Packet{T: PingPacket, D: nil}, false}
+			want := `2`
+			return data, want, nil
+		},
+		"Pong with Text": func() (PacketV3, string, error) {
+			want := `3probe`
+			data := PacketV3{Packet{T: PongPacket, D: "probe"}, false}
+			return data, want, nil
+		},
+		"Message": func() (PacketV3, string, error) {
+			want := `4HelloWorld`
+			data := PacketV3{Packet{T: MessagePacket, D: "HelloWorld"}, false}
+			return data, want, nil
+		},
+		"Message with Binary": func() (PacketV3, string, error) {
+			want := "4\x00\x01\x02\x03\x04\x05"
+			data := PacketV3{Packet{T: MessagePacket, D: bytes.NewReader([]byte{0x0, 0x1, 0x2, 0x3, 0x4, 0x5})}, false}
+			return data, want, nil
+		},
+		"Upgrade": func() (PacketV3, string, error) {
+			want := `5`
+			data := PacketV3{Packet{T: UpgradePacket, D: nil}, false}
+			return data, want, nil
+		},
+		"NOOP": func() (PacketV3, string, error) {
+			want := `6`
+			data := PacketV3{Packet{T: NoopPacket, D: nil}, false}
+			return data, want, nil
+		},
+	}
 
-			buf.Reset()
-			{
-				var data = test.data
-				if _data, ok := test.data.(writerTo); ok {
-					data = strings.NewReader(string(_data))
-				}
-				var pkt = Packet{T: test.kind, D: data}
-				var err = encoder.To(buf).WritePacket(PacketV3{Packet: pkt})
+	extra := map[string]params{
+		"Message with Binary": func() (PacketV3, string, error) {
+			want := "4\x00\x01\x02\x03\x04\x05"
+			data := PacketV3{Packet{T: MessagePacket, D: "\x00\x01\x02\x03\x04\x05"}, false}
+			return data, want, nil
+		},
+	}
 
-				assert.ErrorIs(t, err, test.want.error)
-				assert.Equal(t, test.want.string, buf.String())
+	for _, cases := range []map[string]params{spec, extra} {
+		for name, testing := range cases {
+			for suffix, runWithOption := range runWithOptions {
+				t.Run(name+suffix, runWithOption(opts...)(testing()))
 			}
-		})
+		}
 	}
 }

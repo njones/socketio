@@ -4,10 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
-	"strconv"
-	"strings"
 	"unicode/utf8"
 )
 
@@ -61,45 +58,4 @@ ReadMore:
 		}
 	}
 	return cnt, err
-}
-
-// head formats the header for v3 payload encoding
-func head(length uint64, isBinary bool) []byte {
-	var x uint64
-	if isBinary {
-		x = 1
-	}
-
-	blen := Ltob(length - x)
-	header := make([]byte, len(blen)+2)
-	copy(header[1:], blen)
-	header[len(header)-1] = 0xFF
-
-	header[0] = byte(x)
-	return header
-}
-
-// Ltob is len to bytes conversion. This converts a number to a []byte slice
-// 455 => []byte{4,5,5}
-func Ltob(u uint64) []byte {
-	s := strconv.FormatUint(u, 10)
-	p := make([]byte, len(s))
-	for i, k := range []byte(s) {
-		p[i] = k & 0x0F
-	}
-	return p
-}
-
-// Btol is bytes to len conversion. This []byte slice to a number
-// []byte{4,5,5} => 455
-func Btol(p []byte) uint64 {
-	var s = new(strings.Builder)
-	for _, k := range p {
-		s.WriteString(fmt.Sprintf("%d", k))
-	}
-	u, err := strconv.ParseUint(s.String(), 10, 64)
-	if err != nil {
-		panic(err)
-	}
-	return u
 }
