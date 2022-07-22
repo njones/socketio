@@ -28,6 +28,16 @@ type packet struct {
 	ket func() Packet `json:"-"` // is a function that will return self packet (object) as a Packet (interface)
 }
 
+func (pac packet) Len() (n int) {
+	n += pac.Type.Len()
+	n += pac.Namespace.Len()
+	n += pac.AckID.Len()
+	if x, ok := pac.Data.(interface{ Len() int }); ok {
+		n += x.Len()
+	}
+	return n
+}
+
 // -------------------------------------------------
 // -- provide the Packet interface methods below ---
 // -------------------------------------------------

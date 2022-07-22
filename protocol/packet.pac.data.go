@@ -33,6 +33,13 @@ type (
 // packetDataString
 //
 
+func (x packetDataString) Len() int {
+	if x.x == nil {
+		return 0
+	}
+	return len(*x.x)
+}
+
 func (x *packetDataString) Read(p []byte) (n int, err error) {
 	if x.x == nil || len(*x.x) == 0 {
 		return
@@ -59,6 +66,25 @@ func (x *packetDataString) Write(p []byte) (n int, err error) {
 //
 // packetDataArray
 //
+
+func (x *packetDataArray) Len() (n int) {
+	if len(x.x) == 0 {
+		return 0
+	}
+
+	for _, v := range x.x {
+		switch data := v.(type) {
+		case interface{ Len() int }:
+			n += data.Len()
+		case string:
+			n += len(data) + 2
+		}
+	}
+
+	n += len(x.x) - 1 // adding in commas
+	n += 2            // the 2 is: `[]`
+	return n
+}
 
 func (x *packetDataArray) Read(p []byte) (n int, err error) {
 	if len(x.x) == 0 {
@@ -138,6 +164,26 @@ func (x *packetDataArray) Write(p []byte) (n int, err error) {
 //
 // packetDataObject
 //
+
+func (x packetDataObject) Len() (n int) {
+	if len(x.x) == 0 {
+		return 0
+	}
+
+	for k, v := range x.x {
+		n += len(k) + 3 // the +3 is: `"":`
+		switch data := v.(type) {
+		case interface{ Len() int }:
+			n += data.Len()
+		case string:
+			n += len(data) + 2 // the +2 is `""`
+		}
+	}
+
+	n += len(x.x) - 1 // adding in commas
+	n += 2            // the 2 is: `{}`
+	return n
+}
 
 func (x *packetDataObject) Read(p []byte) (n int, err error) {
 	if len(x.x) == 0 {

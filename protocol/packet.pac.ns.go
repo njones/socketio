@@ -3,6 +3,13 @@ package protocol
 // packetNS represents the Namespace part of a SocketIO packet
 type packetNS string
 
+func (x packetNS) Len() int {
+	if x == "/" {
+		return 0
+	}
+	return len(x) + 1 // +1 for the comma
+}
+
 // Read reads the Namespace string to the p byte slice. If the p byte slice is
 // not big enough then it errors with a buffer of the rest of the data. The error
 // can be compared to the error ErrShortRead.

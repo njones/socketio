@@ -5,6 +5,13 @@ import "strconv"
 // packetAckID represents the AckID part of a socket.io packet
 type packetAckID uint64
 
+func (x packetAckID) Len() int {
+	if x == 0 {
+		return 0
+	}
+	return len(strconv.FormatUint(uint64(x), 10))
+}
+
 // Read reads the AckID to the p byte slice. If the p byte slice is not big
 // enough then it errors with a buffer of the rest of the data. The error
 // can be compared to the error ErrShortRead.

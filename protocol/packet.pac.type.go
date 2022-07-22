@@ -3,6 +3,16 @@ package protocol
 // packetNS represents the Type part of a SocketIO packet
 type packetType byte
 
+func (x packetType) Len() int {
+	switch {
+	case x < 10:
+		return 1
+	case x < 100:
+		return 2
+	}
+	return 3
+}
+
 // Byte returns the Type as the underlining byte type
 func (x packetType) Byte() byte { return byte(x) }
 
