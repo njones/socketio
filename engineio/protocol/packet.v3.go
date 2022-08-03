@@ -67,7 +67,7 @@ func (enc *PacketEncoderV3) Encode(packet PacketV3) (err error) {
 	switch packet.T {
 	case OpenPacket:
 		switch data := packet.D.(type) {
-		case HandshakeV3:
+		case *HandshakeV3:
 			if data.Upgrades == nil {
 				data.Upgrades = []string{}
 			}
