@@ -64,6 +64,12 @@ func (tr *mapTransport) AckID() uint64 {
 	return tr.ackCount
 }
 
+func (tr *mapTransport) Transport(socketID SocketID) *siot.Transport {
+	tr.ṡ.Lock()
+	defer tr.ṡ.Unlock()
+	return tr.s[socketID]
+}
+
 // socketID to transport relationship methods
 
 // Add creates a new socket id based on adding the EngineIO transport
@@ -78,11 +84,7 @@ func (tr *mapTransport) Add(et eiot.Transporter) (SocketID, error) {
 	socketID := tr.m[et.ID()]
 	tr.ṁ.Unlock()
 
-	tr.ṡ.Lock()
-	defer tr.ṡ.Unlock()
-
-	tr.s[socketID] = siot.NewTransport(socketID, et, tr.f)
-	return socketID, nil
+	return socketID, tr.Set(socketID, et)
 }
 
 func (tr *mapTransport) Set(socketID SocketID, et eiot.Transporter) error {
@@ -145,8 +147,12 @@ func (tr *mapTransport) Leave(ns Namespace, socketID SocketID, room Room) error 
 
 func (tr *mapTransport) Sockets(namespace Namespace) siot.SocketArray {
 	var ids []SocketID
-	for _, socketID := range tr.m {
-		ids = append(ids, socketID)
+	for ns, socketIDs := range tr.r {
+		if ns == namespace {
+			for socketID := range socketIDs {
+				ids = append(ids, socketID)
+			}
+		}
 	}
 
 	return siot.InitSocketArray(namespace, ids, siot.WithSocketRoomFilter(
