@@ -59,6 +59,9 @@ func (x *binaryStreamIn) Write(p []byte) (n int, err error) {
 			}
 			*x = make([]func(io.Reader) error, k)
 			return n, err
+		case '[', '{', '"':
+			// then we're not getting a data stream, but an ack
+			return 0, nil
 		}
 		if i == 0 {
 			return 0, nil

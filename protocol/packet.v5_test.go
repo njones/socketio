@@ -184,6 +184,14 @@ func TestPacketV5Read(t *testing.T) {
 				WithNamespace("/admin?token=1234&uid=abcd").(*PacketV5)
 			return data, want, nil
 		},
+		"ACK no namespace": func() (PacketV5, [][]byte, error) {
+			want := [][]byte{[]byte(`3456["make",123]`)}
+			data := *NewPacketV5().
+				WithType(AckPacket.Byte()).
+				WithData([]interface{}{"make", 123}).
+				WithAckID(456).(*PacketV5)
+			return data, want, nil
+		},
 	}
 
 	mergeReadV5(extra, spec)

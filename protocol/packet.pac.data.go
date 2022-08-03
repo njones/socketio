@@ -78,6 +78,12 @@ func (x *packetDataArray) Len() (n int) {
 			n += data.Len()
 		case string:
 			n += len(data) + 2
+		case int, int8, int16, int32, int64:
+			n += intLen(data)
+		case uint, uint8, uint16, uint32, uint64:
+			n += intLen(data)
+		case float32, float64:
+			n += intLen(data)
 		}
 	}
 
@@ -177,6 +183,12 @@ func (x packetDataObject) Len() (n int) {
 			n += data.Len()
 		case string:
 			n += len(data) + 2 // the +2 is `""`
+		case int, int8, int16, int32, int64:
+			n += intLen(data)
+		case uint, uint8, uint16, uint32, uint64:
+			n += intLen(data)
+		case float32, float64:
+			n += intLen(data)
 		}
 	}
 
