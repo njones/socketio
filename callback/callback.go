@@ -3,6 +3,8 @@ package callback
 import (
 	"errors"
 	"reflect"
+	"strconv"
+	"strings"
 
 	seri "github.com/njones/socketio/serialize"
 )
@@ -14,6 +16,26 @@ func (ErrorWrap) Serialize() (string, error) {
 	return "", ErrStubSerialize
 }
 func (ErrorWrap) Unserialize(string) error {
+	return ErrStubUnserialize
+}
+
+type FuncString func(string)
+
+func (fn FuncString) Callback(v ...interface{}) error {
+	if len(v) == 0 {
+		v = append(v, "unknown")
+	}
+	if val, ok := v[0].(string); ok {
+		fn(val)
+	} else {
+		fn("undefined")
+	}
+	return nil
+}
+func (FuncString) Serialize() (string, error) {
+	return "", ErrStubSerialize
+}
+func (FuncString) Unserialize(string) error {
 	return ErrStubUnserialize
 }
 
@@ -56,6 +78,10 @@ func (fn Wrap) Callback(data ...interface{}) (err error) {
 		switch v := data[i].(type) {
 		case string:
 			val.Unserialize(v)
+		case float64:
+			vStr := strconv.FormatFloat(v, 'f', 10, 64)
+			vStr = strings.TrimRight(vStr, ".0")
+			val.Unserialize(vStr)
 		default:
 			return ErrBadParamType
 		}
