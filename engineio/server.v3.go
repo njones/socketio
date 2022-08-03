@@ -60,6 +60,8 @@ func (v3 *serverV3) new(opts ...Option) *serverV3 {
 	return v3
 }
 
+func (v3 *serverV3) prev() Server { return v3.serverV2 }
+
 func (v3 *serverV3) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	if origin := r.Header.Get("Origin"); origin != "" && v3.cors.enable {
 		if v3.cors.credentials {

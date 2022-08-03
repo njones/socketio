@@ -47,20 +47,6 @@ func WithUpgradeTimeout(d time.Duration) Option {
 	}
 }
 
-var clearTransports = new(sync.Once)
-
-func WithTransport(name eiot.Name, tr func(SessionID, eiot.Codec) eiot.Transporter) Option {
-	return func(svr Server) {
-		switch v := svr.(type) {
-		case *serverV2:
-			clearTransports.Do(func() {
-				v.transports = make(map[eiot.Name]func(session.ID, eiot.Codec) eiot.Transporter)
-			})
-			v.transports[name] = tr
-		}
-	}
-}
-
 func WithCookie(name, path string, httpOnly bool) Option {
 	return func(svr Server) {
 		switch v := svr.(type) {
@@ -86,6 +72,24 @@ func WithTransportChannelBuffer(n int) Option {
 		switch v := svr.(type) {
 		case *serverV2:
 			v.transportChanBuf = n
+		}
+	}
+}
+
+var clearTransports = new(sync.Once)
+
+func WithTransport(name eiot.Name, tr func(SessionID, eiot.Codec) eiot.Transporter) Option {
+	return func(svr Server) {
+	ServerCheck: // makes things an O(2^n) check...
+		switch v := svr.(type) {
+		case *serverV2:
+			clearTransports.Do(func() {
+				v.transports = make(map[eiot.Name]func(session.ID, eiot.Codec) eiot.Transporter)
+			})
+			v.transports[name] = tr
+		case interface{ prev() Server }:
+			svr = v.prev()
+			goto ServerCheck
 		}
 	}
 }

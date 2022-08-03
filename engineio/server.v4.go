@@ -38,3 +38,5 @@ func (v4 *serverV4) new(opts ...Option) *serverV4 {
 	v4.With(v4, opts...)
 	return v4
 }
+
+func (v4 *serverV4) prev() Server { return v4.serverV3 }
