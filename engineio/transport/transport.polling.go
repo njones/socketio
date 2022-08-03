@@ -83,29 +83,29 @@ func (t *PollingTransport) Run(_w http.ResponseWriter, r *http.Request, opts ...
 func (t *PollingTransport) poll(w http.ResponseWriter, r *http.Request) error {
 	var ctx = r.Context()
 	var interval = time.After(t.interval)
-	var hasPayload bool
+	var packets eiop.Payload
 
 Write:
 	for {
 		select {
 		case packet := <-t.receive:
-			hasPayload = true
-			if err := t.codec.PayloadEncoder.To(w).WritePayload(eiop.Payload{packet}); err != nil {
-				t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{err}}
-				return ErrTransportEncode.F("polling", err)
-			}
-			if len(t.receive) == 0 {
-				t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{}}
-			}
+			packets = append(packets, packet)
 		case <-ctx.Done():
 			break Write
 		case <-interval:
 			break Write
 		default:
 			time.Sleep(t.sleep) // let other things come in if things are coming quick...
-			if hasPayload && len(t.receive) == 0 {
-				break Write // return if we have something, and nothing is in the pipeline
+			if len(packets) > 0 && len(t.receive) == 0 {
+				break Write
 			}
+		}
+	}
+
+	if len(packets) > 0 {
+		if err := t.codec.PayloadEncoder.To(w).WritePayload(packets); err != nil {
+			t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{err}}
+			return ErrTransportEncode.F("polling", err)
 		}
 	}
 
