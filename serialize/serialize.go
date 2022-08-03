@@ -115,3 +115,13 @@ func (x *_binary) Unserialize(str string) error {
 func Binary(x io.Reader) *_binary { return &_binary{x} }
 
 var Bin _internal_ = &_internal_binary{nil}
+
+type Convert []Serializable
+
+func (in Convert) ToInterface() []interface{} {
+	out := make([]interface{}, len(in))
+	for i, v := range in {
+		out[i], _ = v.Serialize()
+	}
+	return out
+}
