@@ -29,8 +29,18 @@ type (
 	}
 )
 
+type buffer struct {
+	active  bool
+	packets []eiop.Packet
+}
+
+func (buf *buffer) StartBuffer() { buf.active = true }
+func (buf *buffer) StopBuffer()  { buf.active = false }
+
 type Transport struct {
 	id SocketID
+
+	*buffer
 
 	receive      chan Socket
 	packetMaker  siop.NewPacket
@@ -39,6 +49,7 @@ type Transport struct {
 
 func NewTransport(id SocketID, eioTransport eiot.Transporter, packetMaker siop.NewPacket) *Transport {
 	return &Transport{
+		buffer:       &buffer{},
 		id:           id,
 		receive:      make(chan Socket, 1000),
 		packetMaker:  packetMaker,
@@ -46,9 +57,20 @@ func NewTransport(id SocketID, eioTransport eiot.Transporter, packetMaker siop.N
 	}
 }
 
+func (t *Transport) SendBuffer() {
+	for _, packet := range t.buffer.packets {
+		t.eioTransport.Send(packet)
+	}
+}
+
 func (t *Transport) Send(data Data, opts ...Option) {
 	sioPacket := t.packetMaker().WithData(data).WithOption(opts...)
-	t.eioTransport.Send(eiop.Packet{T: eiop.MessagePacket, D: sioPacket})
+	eioPacket := eiop.Packet{T: eiop.MessagePacket, D: sioPacket}
+	if t.buffer.active {
+		t.buffer.packets = append(t.buffer.packets, eioPacket)
+		return
+	}
+	t.eioTransport.Send(eioPacket)
 }
 
 func (t *Transport) Receive() <-chan Socket {

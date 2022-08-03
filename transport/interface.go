@@ -18,7 +18,7 @@ type Transporter interface {
 }
 
 type Sender interface {
-	Send(socketID SocketID, data Data, opts ...Option) error
+	Send(SocketID, Data, ...Option) error
 }
 
 type SendReceiver interface {
