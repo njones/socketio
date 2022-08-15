@@ -8,9 +8,10 @@ The library currently supports the following versions:
 |--------------------|--------------------|-----------------|-----------------|
 | v1 (unspecified)   | v2                 | v2.4.1          | v1.8.x          |
 | v2                 | v3                 | v3.0.1          | v2.1.x          |
-| v3                 | v4                 |                 | v3.5.x          |
-| v4                 | v5                 |                 |                 |
-|                    | v6                 |                 |                 |
+| v3                 | v4                 | v4.5.1          | v3.6.x          |
+| v4                 | v5                 |                 | v4.1.x          |
+| v5                 | v6 (same as v5)    |                 | v5.2.x          |
+|                    |                    |                 | v6.1.x          |
 
 Getting the correct features/protocols/versions included inside which SocketIO and EngineIO Server versions can be confusing at times, therefore some servers may initially be implemented incorrectly, or not have features implemented. Please open a ticket for any discrepancies. 
 
@@ -36,6 +37,7 @@ go get github.com/njones/socketio
 ```go
     import sio github.com/njones/socketio
     import eio github.com/njones/socketio/engineio
+    import ser github.com/njones/socketio/serialize
 ```
 
 _inside of a function_
@@ -49,14 +51,14 @@ _inside of a function_
     server.OnConnect(func(socket *socketio.SocketV4) error {
 
         // add serializable data to variables
-        // See: https://github.com/njones/socketio/blob/main/serialize.go for standard serialized types.
+        // See: https://github.com/njones/socketio/blob/main/serialize/serialize.go for standard serialized types.
         // Custom types can be serialized with the following interface: 
-        //   https://github.com/njones/socketio/blob/cdf59a60d92c70862c859ade8415f7399e8fea37/serialize.go#L12
+        // https://github.com/njones/socketio/blob/7c6c70708442f9e8d4b33991389d9c6d155da699/serialize/serialize.go#L12
         canYouHear := sio.String("can you hear me?")
         
-        var extra sio.String = "abc"
-        var questions sio.Int = 1
-        var responses = sio.Int(2)
+        var questions ser.Int = 1
+        var responses = ser.Int(2)
+        var extra ser.String = "abc"
 
         // send out a message to the hello 
         socket.Emit("hello", canYouHear, question, responses, extra)
@@ -77,9 +79,9 @@ The following is in no particular order. Please open an Issue for priority or op
 - [ ] Develop a Redis Transport
 - [ ] Makefile for all individual version builds
 - [ ] Makefile for all individual version git commits
-- [ ] Complete SocketIO Version 4
-- [ ] Complete EIO Server Version 5
-- [ ] Complete EIO Server Version 6
+- [x] Complete SocketIO Version 4
+- [x] Complete EIO Server Version 5
+- [x] Complete EIO Server Version 6
 - [ ] Complete this README
 
 ## License
