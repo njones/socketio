@@ -4,14 +4,14 @@ This Go language SocketIO library aims to support all past, current and future v
 
 The library currently supports the following versions:
 
-| SocketIO protocols | EngineIO protocols | SocketIO Server | EngineIO Server |
-|--------------------|--------------------|-----------------|-----------------|
-| v1 (unspecified)   | v2                 | v2.4.1          | v1.8.x          |
-| v2                 | v3                 | v3.0.1          | v2.1.x          |
-| v3                 | v4                 | v4.5.1          | v3.6.x          |
-| v4                 | v5                 |                 | v4.1.x          |
-| v5                 | v6 (same as v5)    |                 | v5.2.x          |
-|                    |                    |                 | v6.1.x          |
+| SocketIO protocol | EngineIO protocol/payload | SocketIO Server | EngineIO Server     |
+|-------------------|---------------------------|-----------------|---------------------|
+| v1 (unspecified)  | (unspecified)             | v1.0.x          | (unspecified)       |
+| v2                | v2 / v2                   | v2.4.x          | v2.1.x              |
+| v3                | v3 / v3                   | v3.0.x          | v3.6.x              |
+| v4                | v4 / v4                   | v4.5.x          | v4.1.x              |
+| v5                |                           |                 | v5.2.x              |
+|                   |                           |                 | v6.x (same as v5.x) |
 
 Getting the correct features/protocols/versions included inside which SocketIO and EngineIO Server versions can be confusing at times, therefore some servers may initially be implemented incorrectly, or not have features implemented. Please open a ticket for any discrepancies. 
 
