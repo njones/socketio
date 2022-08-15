@@ -83,7 +83,8 @@ func (fn Wrap) Callback(data ...interface{}) (err error) {
 			vStr = strings.TrimRight(vStr, ".0")
 			val.Unserialize(vStr)
 		default:
-			return ErrBadParamType
+			in[i] = reflect.ValueOf(v)
+			continue
 		}
 		if vv, ok := val.(interface{ Interface() interface{} }); ok {
 			in[i] = reflect.ValueOf(vv.Interface())
