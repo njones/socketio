@@ -77,7 +77,37 @@ func (t *Transport) Receive() <-chan Socket {
 	go func() {
 		for eioPacket := range t.eioTransport.Receive() {
 
-			if eioPacket.T == eiop.NoopPacket {
+			switch data := eioPacket.D.(type) {
+			case string:
+				sioPacket := t.packetMaker().(io.ReaderFrom)
+				if _, err := sioPacket.ReadFrom(strings.NewReader(data)); err != nil {
+					t.eioTransport.Send(eiop.Packet{T: eiop.NoopPacket, D: err})
+				}
+				if pac, ok := sioPacket.(interface{ GetType() byte }); ok {
+					switch pac.GetType() {
+					case siop.BinaryEventPacket.Byte(), siop.BinaryAckPacket.Byte():
+						if in, ok := sioPacket.(interface{ ReadBinary() func(io.Reader) error }); ok {
+						EIOPacketData:
+							for eioPacket = range t.eioTransport.Receive() {
+								if eioPacket.T != eiop.BinaryPacket {
+									break EIOPacketData
+								}
+
+								bin := in.ReadBinary()
+								if r, ok := eioPacket.D.(io.Reader); ok && bin != nil {
+									bin(r)
+								}
+							}
+
+						}
+					}
+				}
+
+				t.receive <- packetToSocket(sioPacket.(packet))
+			}
+
+			switch eioPacket.T {
+			case eiop.NoopPacket:
 				if done, ok := eioPacket.D.(interface{ SocketCloseChannel() error }); ok {
 
 					if err := done.SocketCloseChannel(); err != nil {
@@ -90,16 +120,6 @@ func (t *Transport) Receive() <-chan Socket {
 					close(t.receive)
 					return
 				}
-			}
-
-			switch data := eioPacket.D.(type) {
-			case string:
-				sioPacket := t.packetMaker().(io.ReaderFrom)
-				if _, err := sioPacket.ReadFrom(strings.NewReader(data)); err != nil {
-					t.eioTransport.Send(eiop.Packet{T: eiop.NoopPacket, D: err})
-				}
-
-				t.receive <- packetToSocket(sioPacket.(packet))
 			}
 
 		}
