@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"strconv"
 
 	rw "github.com/njones/socketio/internal/readwriter"
 )
@@ -73,83 +72,16 @@ var NewPayloadEncoderV3 _payloadEncoderV3 = func(w io.Writer) *PayloadEncoderV3 
 func (enc *PayloadEncoderV3) Encode(payload PayloadV3) error {
 	for _, packet := range payload {
 		if err := enc.encode(packet); err != nil {
-			return ErrPayloadEncode.F("v4", err)
+			return ErrPayloadEncode.F("v3", err)
 		}
 	}
-	return nil
+	return enc.write.Err()
 }
 
 func (enc *PayloadEncoderV3) encode(packet PacketV3) error {
-	switch packet.T {
-	case MessagePacket:
-		if packet.IsBinary {
-			if enc.IsXHR2 {
-				enc.writeBinaryPacketLen(packet)
-
-				switch data := packet.D.(type) {
-				case string:
-					enc.write.Bytes(packet.T.Bytes()).OnErr(ErrPayloadEncode)
-					enc.write.String(data).OnErr(ErrPayloadEncode)
-				case []byte:
-					enc.write.Bytes(data).OnErr(ErrPayloadEncode)
-				case io.Reader:
-					enc.write.Copy(data).OnErr(ErrPayloadEncode)
-				default:
-					return fmt.Errorf("unspported type: %T", data)
-				}
-				return enc.write.Err()
-			}
-
-			switch data := packet.D.(type) {
-			case []byte:
-				b64Len := base64.StdEncoding.EncodedLen(len(data))
-				enc.write.Bytes(append([]byte(strconv.Itoa(b64Len+2)), ':')).OnErr(ErrPayloadEncode)
-				enc.write.Byte('b').OnErr(ErrPayloadEncode)
-				enc.write.Bytes(packet.T.Bytes()).OnErr(ErrPayloadEncode)
-				enc.write.Base64(base64.StdEncoding).Bytes(data).OnErr(ErrPayloadEncode)
-				return enc.write.Err()
-			case io.Reader:
-				switch length := data.(type) {
-				case useLen:
-					b64Len := base64.StdEncoding.EncodedLen(length.Len())
-					enc.write.Bytes(append([]byte(strconv.Itoa(b64Len+2)), ':')).OnErr(ErrPayloadEncode)
-					enc.write.Byte('b').OnErr(ErrPayloadEncode)
-					enc.write.Bytes(packet.T.Bytes()).OnErr(ErrPayloadEncode)
-					enc.write.Base64(base64.StdEncoding).Copy(data).OnErr(ErrPayloadEncode)
-					return enc.write.Err()
-				}
-			}
-		}
+	enc.write.String(fmt.Sprintf("%d:", packet.Len()))
+	if err := NewPacketEncoderV3(enc.write).Encode(packet); err != nil {
+		return ErrPayloadEncode.F("v3", err)
 	}
-	return enc.PayloadEncoderV2.encode(PacketV2{Packet: packet.Packet})
-}
-
-func (enc *PayloadEncoderV3) writeBinaryPacketLen(packet PacketV3) (n int64, err error) {
-	bytesInt := func(n int) []byte {
-		str := strconv.Itoa(n)
-		byt := make([]byte, len(str))
-		for i, v := range []byte(str) {
-			byt[i] = v & 0x0F
-		}
-		return byt
-	}
-
-	i := len(packet.T.Bytes())
-	switch data := packet.D.(type) {
-	case string:
-		i += len(data)
-		enc.write.Byte(0x00).OnErr(ErrPayloadEncode)
-		enc.write.Bytes(bytesInt(i)).OnErr(ErrPayloadEncode)
-	case []byte:
-		i = len(data)
-		enc.write.Byte(0x01).OnErr(ErrPayloadEncode)
-		enc.write.Bytes(bytesInt(i)).OnErr(ErrPayloadEncode)
-	case useLen:
-		i = data.Len()
-		enc.write.Byte(0x01).OnErr(ErrPayloadEncode)
-		enc.write.Bytes(bytesInt(i)).OnErr(ErrPayloadEncode)
-	}
-	enc.write.Byte(0xFF).OnErr(ErrPayloadEncode)
-
-	return int64(i), enc.write.Err()
+	return nil
 }

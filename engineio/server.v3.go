@@ -56,13 +56,34 @@ func (v3 *serverV3) new(opts ...Option) *serverV3 {
 		PayloadDecoder: eiop.NewPayloadDecoderV3,
 	}
 
+	if v3.servers == nil {
+		v3.servers = make(map[EIOVersionStr]server)
+	}
+	v3.servers[Version3] = v3
+
 	v3.With(v3, opts...)
 	return v3
 }
 
 func (v3 *serverV3) prev() Server { return v3.serverV2 }
 
-func (v3 *serverV3) serveHTTP(w http.ResponseWriter, r *http.Request) error {
+func (v3 *serverV3) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot.Transporter, error) {
+	transport, err := v3.serveTransport(w, r)
+	if err != nil {
+		return transport, err
+	}
+
+	go func() { transport.Run(w, r) }()
+
+	return transport, err
+}
+
+func (v3 *serverV3) serveTransport(w http.ResponseWriter, r *http.Request) (transport eiot.Transporter, err error) {
+	if v3.path == nil || !strings.HasPrefix(r.URL.Path, *v3.path) {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return nil, ErrURIPath
+	}
+
 	if origin := r.Header.Get("Origin"); origin != "" && v3.cors.enable {
 		if v3.cors.credentials {
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -98,14 +119,23 @@ func (v3 *serverV3) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if strings.ToUpper(r.Method) == "OPTIONS" {
-		return nil
+		return nil, nil // TODO(njones): make sure a nil transport is useful
 	}
 
 	sessionID := sessionIDFrom(r)
-
 	if sessionID == "" {
-		_, err := v3.initHandshake(w, r)
-		if errors.Is(err, EOH) {
+		return v3.initHandshake(w, r)
+	}
+
+	transport, err = v3.sessions.Get(sessionID)
+
+	return
+}
+
+func (v3 *serverV3) serveHTTP(w http.ResponseWriter, r *http.Request) error {
+	transport, err := v3.serveTransport(w, r)
+	if err != nil {
+		if errors.Is(err, EndOfHandshake{}) {
 			return nil
 		}
 		return err
@@ -113,15 +143,10 @@ func (v3 *serverV3) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 
 	toTransport := transportNameFrom(r)
 
-	transport, err := v3.sessions.Get(sessionID)
-	if err != nil {
-		return err
-	}
-
 	if v3.allowUpgrades {
-		if tport, ok := v3.doUpgrade(transport, toTransport); ok {
-			transport.Shutdown() // the previous transport should stop, now overwrite it...
-			transport = tport    // no shadowing, we want to replace the transport...
+		if upgradedTransport, ok := v3.doUpgrade(transport, toTransport); ok {
+			transport.Shutdown()          // the previous transport should stop... then overwrite it...
+			transport = upgradedTransport // no shadowing, we want to replace the transport...
 		}
 	}
 
@@ -166,26 +191,5 @@ func (v3 *serverV3) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 	}
 
 	// End Of Handshake
-	return transport, EOH
-}
-
-func (v3 *serverV3) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot.Transporter, error) {
-	if v3.path == nil || !strings.HasPrefix(r.URL.Path, *v3.path) {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return nil, ErrURIPath
-	}
-
-	sessionID := sessionIDFrom(r)
-	if sessionID == "" {
-		return v3.initHandshake(w, r)
-	}
-
-	transport, err := v3.sessions.Get(sessionID)
-	if err != nil {
-		return nil, err
-	}
-
-	go func() { transport.Run(w, r) }()
-
-	return transport, nil
+	return transport, EndOfHandshake{SessionID: sessionID.String()}
 }

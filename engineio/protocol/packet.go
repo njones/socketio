@@ -57,7 +57,7 @@ func (pac Packet) Len() int {
 	case nil:
 		return n
 	case string:
-		return n + len([]rune(d))
+		return n + len(d)
 	case useLen:
 		return n + d.Len()
 	}
