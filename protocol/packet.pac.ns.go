@@ -4,7 +4,7 @@ package protocol
 type packetNS string
 
 func (x packetNS) Len() int {
-	if x == "/" {
+	if x == "/" || x == "" {
 		return 0
 	}
 	return len(x) + 1 // +1 for the comma

@@ -24,7 +24,7 @@ func mergeWriteV2(dst, src map[string]func() ([]byte, PacketV2, error)) {
 }
 
 func TestPacketV2Read(t *testing.T) {
-	var opts = []testoption{runTest("ACK with Object and Binary.ReadFrom")}
+	var opts = []testoption{}
 
 	testchecks := map[string]func(checks ...testoption) testReadV2{
 		".ReadFrom": func(checks ...testoption) testReadV2 {
@@ -175,7 +175,7 @@ func TestPacketV2Read(t *testing.T) {
 }
 
 func TestWritePacketV2(t *testing.T) {
-	var opts []testoption
+	var opts = []testoption{}
 
 	testcheck := func(checks ...testoption) testWriteV2 {
 		return func(data []byte, want PacketV2, xerr error) func(*testing.T) {
