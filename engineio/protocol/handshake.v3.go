@@ -3,7 +3,10 @@
 
 package protocol
 
-import "math"
+import (
+	"math"
+	"time"
+)
 
 type HandshakeV3 struct {
 	HandshakeV2
@@ -18,7 +21,8 @@ func (h *HandshakeV3) Len() int {
 	n += pingIntervalKeyLength
 	n += 1 // the (+1) for the next calculation: floor(log10()) + 1
 	if h.PingInterval > 0 {
-		n += int(math.Floor(math.Log10(float64(h.PingInterval))))
+		inSeconds := h.PingInterval / Duration(time.Millisecond)
+		n += int(math.Floor(math.Log10(float64(inSeconds))))
 	}
 	return n
 }

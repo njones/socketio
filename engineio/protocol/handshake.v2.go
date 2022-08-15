@@ -5,6 +5,7 @@ package protocol
 
 import (
 	"math"
+	"time"
 )
 
 type HandshakeV2 struct {
@@ -18,6 +19,7 @@ func (h *HandshakeV2) Len() int {
 	if h == nil {
 		h = new(HandshakeV2)
 	}
+
 	n += emptyBracketsLength
 	n += emptySIDLength
 	n += commaLength
@@ -28,7 +30,8 @@ func (h *HandshakeV2) Len() int {
 
 	// Now the data
 	if h.PingTimeout > 0 {
-		n += int(math.Floor(math.Log10(float64(h.PingTimeout))))
+		inSeconds := h.PingTimeout / Duration(time.Millisecond)
+		n += int(math.Floor(math.Log10(float64(inSeconds))))
 	}
 	n += len(h.SID)
 	for i, v := range h.Upgrades {

@@ -72,7 +72,10 @@ func (v2 *serverV2) new(opts ...Option) *serverV2 {
 		PayloadDecoder: eiop.NewPayloadDecoderV2,
 	}
 
-	v2.servers = make(map[EIOVersionStr]server)
+	if v2.servers == nil {
+		v2.servers = make(map[EIOVersionStr]server)
+	}
+	v2.servers[Version2] = v2
 	v2.sessions = NewSessionMap()
 	v2.transports = make(map[eiot.Name]func(SessionID, eiot.Codec) eiot.Transporter)
 
@@ -154,7 +157,7 @@ func (v2 *serverV2) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 
 	if sessionID == "" {
 		_, err := v2.initHandshake(w, r)
-		if errors.Is(err, EOH) {
+		if errors.Is(err, EndOfHandshake{}) {
 			return nil
 		}
 		return err
@@ -212,7 +215,7 @@ func (v2 *serverV2) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 	}
 
 	// End Of Handshake
-	return transport, EOH
+	return transport, EndOfHandshake{SessionID: sessionID.String()}
 }
 
 func (v2 *serverV2) doUpgrade(t eiot.Transporter /*id SessionID, from,*/, to eiot.Name) (eiot.Transporter, bool) {
