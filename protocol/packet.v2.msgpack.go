@@ -48,15 +48,20 @@ func packetDataArrayUnmarshalV2(data []byte, v interface{}) error {
 		for i, field := range (*fields)[1:] {
 			switch datum := field.(type) {
 			case map[string]interface{}:
-				if isBase64, ok := datum["base64"].(bool); !ok || !isBase64 {
-					continue
-				} else if _, ok := datum["data"].(string); !ok {
+				isBase64, _ := datum["base64"].(bool)
+
+				if _, ok := datum["data"].(string); !ok {
 					continue
 				}
 
 				var raw, buf []byte
-				if raw, err = base64.StdEncoding.DecodeString(datum["data"].(string)); err != nil {
-					return ErrBadFieldBase64Decode.F(err)
+				if isBase64 {
+					if raw, err = base64.StdEncoding.DecodeString(datum["data"].(string)); err != nil {
+						return ErrBadFieldBase64Decode.F(err)
+					}
+				} else {
+					rawStr, _ := datum["data"].(string)
+					raw = []byte(rawStr)
 				}
 				if err = msgpack.Unmarshal(raw, &buf); err != nil {
 					return ErrBadFieldMsgPackDecode.F(err)

@@ -130,6 +130,14 @@ func (pac *PacketV4) Write(p []byte) (n int, err error) {
 	return pac.scratch.write.n, pac.scratch.write.err
 }
 
+func (pac *PacketV4) ReadBinary() (bin func(r io.Reader) error) {
+	if len(pac.incoming) == 0 {
+		return nil
+	}
+	bin, pac.incoming = pac.incoming[0], pac.incoming[1:]
+	return bin
+}
+
 func binaryTypeCheckV4(_type *packetType) writeStateFn {
 	return func(p []byte) stateFn {
 		return func(scr *scratch) stateFn {

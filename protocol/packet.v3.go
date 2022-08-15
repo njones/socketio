@@ -153,6 +153,21 @@ func writeDataToPacketV3(w io.Writer, in *binaryStreamIn) writeStateFn {
 	}
 }
 
+type copyReader struct {
+	r   io.Reader
+	err chan error
+}
+
+func (cr copyReader) Read(p []byte) (n int, err error) {
+	n, err = cr.r.Read(p)
+	select {
+	case e := <-cr.err:
+		return n, e
+	default:
+		return n, err
+	}
+}
+
 func packetDataArrayUnmarshalV3(incoming *binaryStreamIn) func([]byte, interface{}) error {
 	return func(data_ []byte, vw interface{}) error {
 		err := json.Unmarshal(data_, vw)
@@ -167,19 +182,24 @@ func packetDataArrayUnmarshalV3(incoming *binaryStreamIn) func([]byte, interface
 					if isPlaceholder, ok := m["_placeholder"].(bool); ok && isPlaceholder {
 						pr, pw := io.Pipe()
 						idx := int(m["num"].(float64))
+
+						cr := copyReader{r: pr, err: make(chan error, 1)}
+
 						(*incoming)[idx] = func(r io.Reader) error {
 
-							e := make(chan error, 1)
 							go func() {
-								io.Copy(pw, r)
-								e <- pw.Close()
+								_, err := io.Copy(pw, r)
+								if err != nil {
+									cr.err <- err
+									return
+								}
+								cr.err <- pw.Close()
 							}()
-
-							return <-e
+							return nil
 						}
 
 						vvw, _ := vw.(*[]interface{})
-						(*vvw)[i] = io.Reader(pr)
+						(*vvw)[i] = io.Reader(cr)
 					}
 				}
 			}
