@@ -3,14 +3,18 @@ package socketio
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	tmap "github.com/njones/socketio/adaptor/transport/map"
 	eio "github.com/njones/socketio/engineio"
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
 )
+
+// The 3rd revision (included in socket.io@1.0.0...1.0.2) can be found here: https://github.com/socketio/socket.io-protocol/tree/v3
 
 // https://socket.io/blog/introducing-socket-io-1-0
 // https://socket.io/blog/socket-io-1-4-0/
@@ -23,8 +27,9 @@ type ServerV1 struct {
 	run                func(req *Request, socketID SocketID) error
 	doConnectPacket    func(req *Request, socketID SocketID, socket siot.Socket) error
 	doDisconnectPacket func(req *Request, socketID SocketID, socket siot.Socket) error
-	doEventPacket      func(socket siot.Socket) error
-	doAckPacket        func(socket siot.Socket) error
+	doEventPacket      func(socketID SocketID, socket siot.Socket) error
+	doAckPacket        func(socketID SocketID, socket siot.Socket) error
+	doAutoReconnect    func(string) func(http.ResponseWriter, *http.Request)
 
 	ctx context.Context
 
@@ -52,19 +57,33 @@ func (v1 *ServerV1) new(opts ...Option) Server {
 	v1.doDisconnectPacket = doDisconnectPacket(v1)
 	v1.doEventPacket = doEventPacket(v1)
 	v1.doAckPacket = doAckPacket(v1)
+	v1.doAutoReconnect = func(sid string) func(http.ResponseWriter, *http.Request) {
+		return func(w http.ResponseWriter, r *http.Request) {
+			query := r.URL.Query() // keep EIO and Transport...
+			query.Del("sid")
+			query.Del("t")
+
+			url := fmt.Sprintf("%s?&sid=%s&t=%d&%s", *v1.path, sid, time.Now().UnixNano(), query.Encode())
+			req, _ := http.NewRequest(http.MethodPost, url, strings.NewReader("2:40"))
+			v1.ServeHTTP(w, req.WithContext(r.Context()))
+			fmt.Fprintf(w, "%s40", "2:")
+		}
+	}
 
 	v1.ns = "/"
 	v1.path = amp("/socket.io/")
-	v1.events = make(map[Namespace]map[Event]eventCallback)
+	v1.events = make(map[Namespace]map[Event]map[SocketID]eventCallback)
 	v1.onConnect = make(map[Namespace]onConnectCallbackVersion1)
+
+	v1.protectedEventName = v1ProtectedEventName
 
 	v1.eio = eio.NewServerV2(eio.WithPath(*v1.path)).(eio.EIOServer)
 	v1.transport = tmap.NewMapTransport(siop.NewPacketV2) // set the default transport
 
-	v1.inSocketV1.binary = true   // for the v1 implentation this always is set to true
-	v1.inSocketV1.compress = true // for the v1 implentation this always is set to true
+	v1.inSocketV1.binary = true   // for the v1 implementation this always is set to true
+	v1.inSocketV1.compress = true // for the v1 implementation this always is set to true
 
-	v1.With(v1, opts...)
+	v1.With(opts...)
 	if eioSvr, ok := v1.eio.(withOption); ok {
 		eioSvr.With(v1.eio.(Server), opts...)
 	}
@@ -75,11 +94,19 @@ func (v1 *ServerV1) new(opts ...Option) Server {
 }
 
 // With takes in a server version and applies Options to that server object.
-func (v1 *ServerV1) With(svr Server, opts ...Option) {
+func (v1 *ServerV1) With(opts ...Option) { v1.with(v1, opts...) }
+
+func (v1 *ServerV1) with(svr Server, opts ...Option) {
 	for _, opt := range opts {
 		opt(svr)
 	}
 }
+
+func (v1 *ServerV1) In(room Room) inToEmit { v1.setIsServer(true); return v1.inSocketV1.In(room) }
+
+func (v1 *ServerV1) Of(ns Namespace) inSocketV1 { v1.setIsServer(true); return v1.inSocketV1.Of(ns) }
+
+func (v1 *ServerV1) To(room Room) inToEmit { v1.setIsServer(true); return v1.inSocketV1.To(room) }
 
 // ServeHTTP is the interface for applying a http request/response cycle. This handles
 // errors that can be provided by the underlining serveHTTP method that uses errors.
@@ -94,6 +121,12 @@ func (v1 *ServerV1) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := v1.serveHTTP(w, r.WithContext(ctx)); err != nil {
+		if errors.Is(err, eio.EndOfHandshake{}) {
+			if v1.doAutoReconnect != nil {
+				v1.doAutoReconnect(err.(eio.EndOfHandshake).SessionID)(w, r)
+			}
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -101,19 +134,16 @@ func (v1 *ServerV1) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // serveHTTP is the same as ServeHTTP but uses errors to break out of request cycles that
 // have an error. The response is handled in the upper ServeHTTP method.
-func (v1 *ServerV1) serveHTTP(w http.ResponseWriter, r *http.Request) error {
+func (v1 *ServerV1) serveHTTP(w http.ResponseWriter, r *http.Request) (err error) {
 	eioTransport, err := v1.eio.ServeTransport(w, r)
 	if err != nil {
-		if errors.Is(err, eio.EOH) {
-			_, err = v1.transport.Add(eioTransport)
-		}
 		return err
 	}
 
-	socketID, err := v1.transport.Add(eioTransport)
+	v1._socketID, err = v1.transport.Add(eioTransport)
 	if err != nil {
 		return err
 	}
 
-	return v1.run(sioRequest(r), socketID)
+	return v1.run(sioRequest(r), v1._socketID)
 }

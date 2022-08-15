@@ -4,6 +4,7 @@ import seri "github.com/njones/socketio/serialize"
 
 func amp(s string) *string { return &s }
 
+// stoi is string to interface
 func stoi(s []string) []interface{} {
 	rtn := make([]interface{}, len(s))
 	for i, v := range s {
@@ -12,7 +13,9 @@ func stoi(s []string) []interface{} {
 	return rtn
 }
 
-func serviceError(err error) []interface{} { return []interface{}{seri.Error(err)} }
+func serviceError(err error) map[string]interface{} {
+	return map[string]interface{}{"message": err.Error()}
+}
 
 func scrub(useBinary bool, event Event, data []seri.Serializable) (out interface{}, cb eventCallback, err error) {
 	if !useBinary {
