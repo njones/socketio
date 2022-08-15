@@ -3,6 +3,7 @@ package socketio_test
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -15,28 +16,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestServerV1(t *testing.T) {
+func TestServerV2(t *testing.T) {
 	var opts []testingOption
 
 	type (
-		v1TestFn       func(*testing.T)
-		v1ParamsInFn   func(socketio.Server, int, map[string][][]string, *sync.WaitGroup) v1TestFn
-		v1ParamsOutFn  func(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup)
-		v1TestServerFn func(...testingOption) v1ParamsInFn
+		v2TestFn       func(*testing.T)
+		v2ParamsInFn   func(socketio.Server, int, map[string][][]string, *sync.WaitGroup) v2TestFn
+		v2ParamsOutFn  func(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup)
+		v2TestServerFn func(...testingOption) v2ParamsInFn
 	)
 
-	var EIOv = 2
+	var EIOv = 3
 
-	runWithOptions := map[string]v1TestServerFn{
-		".Polling": func(...testingOption) v1ParamsInFn {
-			return func(v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) v1TestFn {
+	runWithOptions := map[string]v2TestServerFn{
+		".Polling": func(...testingOption) v2ParamsInFn {
+			return func(v2 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) v2TestFn {
 				return func(t *testing.T) {
 					for _, opt := range opts {
 						opt(t)
 					}
 
 					var (
-						server = httptest.NewServer(v1)
+						server = httptest.NewServer(v2)
 						client = make([]*testClient, count)
 					)
 
@@ -105,21 +106,21 @@ func TestServerV1(t *testing.T) {
 		},
 	}
 
-	integration := map[string]v1ParamsOutFn{
-		// spec - https://socket.io/docs/v3/emit-cheatsheet/
-		"sending to the client":                                                   SendingToTheClientV1,
-		"sending to all clients except sender":                                    SendingToAllClientsExceptTheSenderV1,
-		"sending to all clients in 'game' room except sender":                     SendingToAllClientsInGameRoomExceptSenderV1,
-		"sending to all clients in 'game1' and/or in 'game2' room, except sender": SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV1,
-		"sending to all clients in 'game' room, including sender":                 SendingToAllClientsInGameRoomIncludingSenderV1,
-		"sending to all clients in namespace 'myNamespace', including sender":     SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV1,
-		"sending to a specific room in a specific namespace, including sender":    SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV1,
-		"sending to individual socketid (private message)":                        SendingToIndividualSocketIDPrivateMessageV1,
-		"sending with acknowledgement":                                            SendingWithAcknowledgementV1,
-		"sending to all connected clients":                                        SendingToAllConnectedClientsV1,
+	integration := map[string]v2ParamsOutFn{
+		"sending to the client":                                                   SendingToTheClientV2,
+		"sending to all clients except sender":                                    SendingToAllClientsExceptTheSenderV2,
+		"sending to all clients in 'game' room except sender":                     SendingToAllClientsInGameRoomExceptSenderV2,
+		"sending to all clients in 'game1' and/or in 'game2' room, except sender": SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV2,
+		"sending to all clients in 'game' room, including sender":                 SendingToAllClientsInGameRoomIncludingSenderV2,
+		"sending to all clients in namespace 'myNamespace', including sender":     SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV2,
+		"sending to a specific room in a specific namespace, including sender":    SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV2,
+		"sending to individual socketid (private message)":                        SendingToIndividualSocketIDPrivateMessageV2,
+		"sending with acknowledgement":                                            SendingWithAcknowledgementV2,
+		"sending to all connected clients":                                        SendingToAllConnectedClientsV2,
 		// extra
-		"on event":          OnEventV1,
-		"reject the client": RejectTheClientV1,
+		"on event":                               OnEventV2,
+		"reject the client":                      RejectTheClientV2,
+		"sending a binary event from the client": SendingBinaryEventFromClientV2,
 	}
 
 	for name, testing := range integration {
@@ -130,9 +131,9 @@ func TestServerV1(t *testing.T) {
 
 }
 
-func SendingToTheClientV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1()
+		v2   = socketio.NewServerV2()
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -148,20 +149,22 @@ func SendingToTheClientV1(*testing.T) (socketio.Server, int, map[string][][]stri
 		one = serialize.Int(1)
 	)
 
+	checkCount(t, count)
+
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
 		socket.Emit("hello", str("can you hear me?"), one, serialize.Int(2), str("abc"))
 		return nil
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
 }
 
-func SendingToAllClientsExceptTheSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsExceptTheSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1()
+		v2   = socketio.NewServerV2()
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -175,8 +178,10 @@ func SendingToAllClientsExceptTheSenderV1(*testing.T) (socketio.Server, int, map
 		cnt   = 0
 	)
 
+	checkCount(t, count)
+
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
 		if cnt == (count - 1) {
@@ -187,12 +192,12 @@ func SendingToAllClientsExceptTheSenderV1(*testing.T) (socketio.Server, int, map
 		return nil
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
 }
 
-func SendingToAllClientsInGameRoomExceptSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInGameRoomExceptSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -208,8 +213,10 @@ func SendingToAllClientsInGameRoomExceptSenderV1(*testing.T) (socketio.Server, i
 		cnt   = 0
 	)
 
+	checkCount(t, count)
+
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
 		if cnt%2 == 0 {
@@ -223,12 +230,12 @@ func SendingToAllClientsInGameRoomExceptSenderV1(*testing.T) (socketio.Server, i
 		return nil
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
 }
 
-func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -252,8 +259,10 @@ func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV1(*testing.T) (socketio
 		cnt   = 0
 	)
 
+	checkCount(t, count)
+
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
 		if cnt%2 == 0 {
@@ -270,12 +279,12 @@ func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV1(*testing.T) (socketio
 		return nil
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
 }
 
-func SendingToAllClientsInGameRoomIncludingSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInGameRoomIncludingSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -291,8 +300,10 @@ func SendingToAllClientsInGameRoomIncludingSenderV1(*testing.T) (socketio.Server
 		cnt   = 0
 	)
 
+	checkCount(t, count)
+
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
 		if cnt%2 == 0 {
@@ -300,18 +311,18 @@ func SendingToAllClientsInGameRoomIncludingSenderV1(*testing.T) (socketio.Server
 		}
 
 		if cnt == (count - 1) {
-			v1.To("game").Emit("big-announcement", serialize.String("the game will start soon"))
+			v2.To("game").Emit("big-announcement", serialize.String("the game will start soon"))
 		}
 		cnt++
 		return nil
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
 }
 
-func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -334,8 +345,10 @@ func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV1(*testing.T) (soc
 		cnt   = 0
 	)
 
+	checkCount(t, count)
+
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
 		return nil
@@ -348,22 +361,22 @@ func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV1(*testing.T) (soc
 		}
 	}
 
-	v1.Of("myNamespace").OnConnect(func(socket *socketio.SocketV1) error {
+	v2.Of("myNamespace").OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 		cnt++
 
 		if cnt == nsCount {
-			v1.Of("myNamespace").Emit("bigger-announcement", serialize.String("the tournament will start soon"))
+			v2.Of("myNamespace").Emit("bigger-announcement", serialize.String("the tournament will start soon"))
 		}
 		return nil
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
 }
 
-func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -386,8 +399,10 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV1(*testing.T) (
 		cnt   = 0
 	)
 
+	checkCount(t, count)
+
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
 		socket.Join("room")
@@ -401,7 +416,7 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV1(*testing.T) (
 		}
 	}
 
-	v1.Of("myNamespace").OnConnect(func(socket *socketio.SocketV1) error {
+	v2.Of("myNamespace").OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 		cnt++
 
@@ -411,18 +426,18 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV1(*testing.T) (
 
 		if cnt == nsCount {
 			socket.Join("room")
-			v1.Of("myNamespace").To("room").Emit("event", serialize.String("message"))
+			v2.Of("myNamespace").To("room").Emit("event", serialize.String("message"))
 		}
 
 		return nil
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
 }
 
-func SendingToIndividualSocketIDPrivateMessageV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToIndividualSocketIDPrivateMessageV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -436,32 +451,34 @@ func SendingToIndividualSocketIDPrivateMessageV1(*testing.T) (socketio.Server, i
 		cnt   = 0
 	)
 
+	checkCount(t, count)
+
 	nextSocketID := make([]chan session.ID, count)
 	for i := range nextSocketID {
 		nextSocketID[i] = make(chan session.ID, 1)
 	}
 
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		nextSocketID[(cnt+1)%count] <- socket.ID()
 
 		go func(num int) {
 			defer wait.Done()
 
 			socketID := <-nextSocketID[num]
-			v1.In(string(socketID)).Emit("hey", serialize.String(fmt.Sprintf("I just met you #%d", num)))
+			v2.In(string(socketID)).Emit("hey", serialize.String(fmt.Sprintf("I just met you #%d", num)))
 		}(cnt)
 
 		cnt++
 		return nil
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
 }
 
-func SendingWithAcknowledgementV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingWithAcknowledgementV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -472,10 +489,12 @@ func SendingWithAcknowledgementV1(t *testing.T) (socketio.Server, int, map[strin
 		cnt   = 0
 	)
 
+	checkCount(t, count)
+
 	var question = serialize.String("do you think so?")
 
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		wait.Done()
 
 		err := socket.Emit("question", question, callback.Wrap{
@@ -498,12 +517,12 @@ func SendingWithAcknowledgementV1(t *testing.T) (socketio.Server, int, map[strin
 		return nil
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
 }
 
-func SendingToAllConnectedClientsV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllConnectedClientsV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -519,23 +538,25 @@ func SendingToAllConnectedClientsV1(*testing.T) (socketio.Server, int, map[strin
 		cnt   = 0
 	)
 
+	checkCount(t, count)
+
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
 		if cnt == (count - 1) {
-			v1.Emit("*", serialize.String("an event sent to all connected clients"))
+			v2.Emit("*", serialize.String("an event sent to all connected clients"))
 		}
 		cnt++
 		return nil
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
 }
 
-func OnEventV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func OnEventV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -561,8 +582,10 @@ func OnEventV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 		cnt, n = 0, 0
 	)
 
+	checkCount(t, count)
+
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
 		socket.Join("room")
@@ -585,22 +608,22 @@ func OnEventV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 			},
 		})
 
-		v1.OnDisconnect(func(reason string) {
+		v2.OnDisconnect(func(reason string) {
 			defer wait.Done()
 
-			v1.In("room").Emit("say goodbye", serialize.String("disconnecting..."))
+			v2.In("room").Emit("say goodbye", serialize.String("disconnecting..."))
 		})
 
 		cnt++
 		return nil
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
 }
 
-func RejectTheClientV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func RejectTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -614,7 +637,7 @@ func RejectTheClientV1(t *testing.T) (socketio.Server, int, map[string][][]strin
 	checkCount(t, count)
 
 	wait.Add(count)
-	v1.OnConnect(func(socket *socketio.SocketV1) error {
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 		cnt++
 
@@ -627,5 +650,43 @@ func RejectTheClientV1(t *testing.T) (socketio.Server, int, map[string][][]strin
 		return fmt.Errorf("not authorized")
 	})
 
-	return v1, count, want, wait
+	return v2, count, want, wait
+}
+
+func SendingBinaryEventFromClientV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+	var (
+		v2   = socketio.NewServerV2(testingQuickPoll)
+		wait = new(sync.WaitGroup)
+
+		want = map[string][][]string{
+			"send1": {
+				{`451-["hello",{"base64":true,"data":"xAQBAgME"}]`},
+			},
+		}
+		count  = len(want["send1"])
+		cnt    = 0
+		expect = []byte{0x01, 0x02, 0x03, 0x04}
+	)
+
+	checkCount(t, count)
+
+	wait.Add(count)
+	v2.OnConnect(func(socket *socketio.SocketV2) error {
+		defer wait.Done()
+
+		cnt++
+		return nil
+	})
+
+	v2.On("hello", testBinaryEventFunc(func(r io.Reader) {
+		defer wait.Done()
+
+		have, err := io.ReadAll(r)
+		assert.NoError(t, err)
+		if !assert.Equal(t, expect, have) {
+			t.FailNow()
+		}
+	}))
+
+	return v2, count, want, wait
 }

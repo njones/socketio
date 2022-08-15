@@ -1,10 +1,12 @@
 package socketio
 
 import (
+	"math/rand"
 	"net/http"
 
 	seri "github.com/njones/socketio/serialize"
 	sess "github.com/njones/socketio/session"
+	siot "github.com/njones/socketio/transport"
 )
 
 const (
@@ -12,6 +14,10 @@ const (
 	ackIDEventPrefix = ":\xACk🆔:"
 	// socketIDPrefix - is used as a room prefix for sending events to the private socket room
 	socketIDPrefix = ":s\x0Cket🆔:"
+)
+
+const (
+	OnDisconnectEvent = "disconnect"
 )
 
 type (
@@ -43,12 +49,6 @@ type inToEmit interface {
 	emit
 }
 
-// toEmit is an interface used to limit the next chained method to In, To or Emit
-type toEmit interface {
-	To(room Room) toEmit
-	emit
-}
-
 // broadcastEmit is an interface used to limit the next chained method to Broadcast or Emit
 type broadcastEmit interface {
 	Broadcast() emit
@@ -58,4 +58,28 @@ type broadcastEmit interface {
 // broadcastEmit is an interface used to limit the next chained method to Emit
 type emit interface {
 	Emit(event Event, data ...Data) error
+}
+
+type tsp interface {
+	Transport(siot.SocketID) *siot.Transport
+}
+
+func socketIDQuickPrefix() string {
+	src := rand.NewSource(42)
+	rnd := rand.New(src)
+
+	cards := [][]rune{
+		{127137, 127150}, // spades
+		{127153, 127166}, // hearts
+		{127169, 127182}, // diamonds
+		{127185, 127198}, // clubs
+	}
+
+	prefix := make([]rune, 5)
+	for i := range prefix {
+		suit := rnd.Intn(4)
+		card := int32(rnd.Intn(int(cards[suit][1]-cards[suit][0]-1))) + cards[suit][0]
+		prefix[i] = card
+	}
+	return string(prefix) + "::"
 }
