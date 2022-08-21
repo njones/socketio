@@ -102,11 +102,23 @@ func (v1 *ServerV1) with(svr Server, opts ...Option) {
 	}
 }
 
-func (v1 *ServerV1) In(room Room) inToEmit { v1.setIsServer(true); return v1.inSocketV1.In(room) }
+func (v1 *ServerV1) In(room Room) inToEmit {
+	rtn := v1.clone()
+	rtn.setIsServer(true)
+	return rtn.In(room)
+}
 
-func (v1 *ServerV1) Of(ns Namespace) inSocketV1 { v1.setIsServer(true); return v1.inSocketV1.Of(ns) }
+func (v1 *ServerV1) Of(ns Namespace) inSocketV1 {
+	rtn := v1.clone()
+	v1.setIsServer(true)
+	return rtn.Of(ns)
+}
 
-func (v1 *ServerV1) To(room Room) inToEmit { v1.setIsServer(true); return v1.inSocketV1.To(room) }
+func (v1 *ServerV1) To(room Room) inToEmit {
+	rtn := v1.clone()
+	rtn.setIsServer(true)
+	return rtn.To(room)
+}
 
 // ServeHTTP is the interface for applying a http request/response cycle. This handles
 // errors that can be provided by the underlining serveHTTP method that uses errors.

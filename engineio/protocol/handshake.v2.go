@@ -31,7 +31,9 @@ func (h *HandshakeV2) Len() int {
 	// Now the data
 	if h.PingTimeout > 0 {
 		inSeconds := h.PingTimeout / Duration(time.Millisecond)
-		n += int(math.Floor(math.Log10(float64(inSeconds))))
+		if inSeconds > 0 {
+			n += int(math.Floor(math.Log10(float64(inSeconds))))
+		}
 	}
 	n += len(h.SID)
 	for i, v := range h.Upgrades {

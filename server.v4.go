@@ -48,23 +48,27 @@ func (v4 *ServerV4) new(opts ...Option) Server {
 func (v4 *ServerV4) With(opts ...Option) { v1 := v4.prev.prev.prev; v1.with(v4, opts...) }
 
 func (v4 *ServerV4) Except(room ...Room) innTooExceptEmit {
-	v4.setIsServer(true)
-	return v4.inSocketV4.Except(room...)
+	rtn := v4.clone()
+	rtn.setIsServer(true)
+	return rtn.Except(room...)
 }
 
 func (v4 *ServerV4) In(room ...Room) innTooExceptEmit {
-	v4.setIsServer(true)
-	return v4.inSocketV4.In(room...)
+	rtn := v4.clone()
+	rtn.setIsServer(true)
+	return rtn.In(room...)
 }
 
 func (v4 *ServerV4) Of(namespace Namespace) inSocketV4 {
-	v4.setIsServer(true)
-	return v4.inSocketV4.Of(namespace)
+	rtn := v4.clone()
+	rtn.setIsServer(true)
+	return rtn.Of(namespace)
 }
 
 func (v4 *ServerV4) To(room ...Room) innTooExceptEmit {
-	v4.setIsServer(true)
-	return v4.inSocketV4.To(room...)
+	rtn := v4.clone()
+	rtn.setIsServer(true)
+	return rtn.To(room...)
 }
 
 func (v4 *ServerV4) ServeHTTP(w http.ResponseWriter, r *http.Request) {

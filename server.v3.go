@@ -52,10 +52,22 @@ func (v3 *ServerV3) new(opts ...Option) Server {
 
 func (v3 *ServerV3) With(opts ...Option) { v1 := v3.prev.prev; v1.with(v3, opts...) }
 
-func (v3 *ServerV3) In(room Room) inToEmit { v3.setIsServer(true); return v3.inSocketV3.In(room) }
+func (v3 *ServerV3) In(room Room) inToEmit {
+	rtn := v3.clone()
+	rtn.setIsServer(true)
+	return rtn.In(room)
+}
 
-func (v3 *ServerV3) Of(ns Namespace) inSocketV3 { v3.setIsServer(true); return v3.inSocketV3.Of(ns) }
+func (v3 *ServerV3) Of(ns Namespace) inSocketV3 {
+	rtn := v3.clone()
+	rtn.setIsServer(true)
+	return rtn.Of(ns)
+}
 
-func (v3 *ServerV3) To(room Room) inToEmit { v3.setIsServer(true); return v3.inSocketV3.To(room) }
+func (v3 *ServerV3) To(room Room) inToEmit {
+	rtn := v3.clone()
+	rtn.setIsServer(true)
+	return rtn.To(room)
+}
 
 func (v3 *ServerV3) ServeHTTP(w http.ResponseWriter, r *http.Request) { v3.prev.ServeHTTP(w, r) }

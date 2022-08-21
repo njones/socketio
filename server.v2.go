@@ -48,10 +48,22 @@ func (v2 *ServerV2) new(opts ...Option) Server {
 
 func (v2 *ServerV2) With(opts ...Option) { v1 := v2.prev; v1.with(v2, opts...) }
 
-func (v2 *ServerV2) In(room Room) inToEmit { v2.setIsServer(true); return v2.inSocketV2.In(room) }
+func (v2 *ServerV2) In(room Room) inToEmit {
+	rtn := v2.clone()
+	rtn.setIsServer(true)
+	return rtn.In(room)
+}
 
-func (v2 *ServerV2) Of(ns Namespace) inSocketV2 { v2.setIsServer(true); return v2.inSocketV2.Of(ns) }
+func (v2 *ServerV2) Of(ns Namespace) inSocketV2 {
+	rtn := v2.clone()
+	rtn.setIsServer(true)
+	return rtn.Of(ns)
+}
 
-func (v2 *ServerV2) To(room Room) inToEmit { v2.setIsServer(true); return v2.inSocketV2.To(room) }
+func (v2 *ServerV2) To(room Room) inToEmit {
+	rtn := v2.clone()
+	rtn.setIsServer(true)
+	return rtn.To(room)
+}
 
 func (v2 *ServerV2) ServeHTTP(w http.ResponseWriter, r *http.Request) { v2.prev.ServeHTTP(w, r) }
