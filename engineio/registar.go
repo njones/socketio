@@ -1,8 +1,8 @@
 package engineio
 
-type registar map[EIOVersionInt]func(opts ...Option) Server
+type registrar map[EIOVersionInt]func(opts ...Option) Server
 
-func (m registar) latest(opts ...Option) Server {
+func (m registrar) latest(opts ...Option) Server {
 	if len(m) == 0 {
 		return nil
 	}
@@ -23,4 +23,4 @@ func (m registar) latest(opts ...Option) Server {
 	return m[ver](opts...)
 }
 
-var registery = make(registar)
+var registry = make(registrar)

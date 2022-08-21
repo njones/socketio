@@ -10,7 +10,7 @@ import (
 
 const Version4 EIOVersionStr = "4"
 
-func init() { registery[Version4.Int()] = NewServerV4 }
+func init() { registry[Version4.Int()] = NewServerV4 }
 
 // https://github.com/socketio/engine.io/tree/fe5d97fc3d7a26d34bce786a97962fae3d7ce17f
 // https://github.com/socketio/engine.io/compare/3.5.x...4.1.x

@@ -172,45 +172,39 @@ func WithHTTPCompression(kind HTTPCompressionKind) Option {
 	}
 }
 
-type jsonpResponseWriter struct {
+type quoteWriter struct {
 	io.Writer
 	http.ResponseWriter
 }
 
-func (jp jsonpResponseWriter) Write(p []byte) (n int, err error) { return jp.Writer.Write(p) }
+func (w quoteWriter) Write(p []byte) (n int, err error) { return w.Writer.Write(p) }
 
-type stringify struct{ buf string }
+type quoteTransform struct{}
 
-func (s *stringify) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err error) {
-	q := strconv.Quote(string(src))
-	nDst = copy(dst, s.buf+q)
-	nSrc = nDst - len(s.buf)
-	s.buf = q[nSrc:]
-
+func (q quoteTransform) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err error) {
+	nDst, nSrc = copy(dst, strings.TrimSuffix(strconv.Quote(string(src))[1:], `"`)), len(src)
 	if atEOF {
 		err = io.EOF
 	}
-
 	return
 }
 
-func (s *stringify) Reset() { s.buf = s.buf[:0] }
+func (q quoteTransform) Reset() {}
 
 func jsonp(next handlerWithError) handlerWithError {
 	return func(w http.ResponseWriter, r *http.Request) error {
-		var j *string
-		if j = jsonpFrom(r); j == nil {
+		var j string
+		if j = r.URL.Query().Get("j"); j == "" {
 			return next(w, r)
 		}
 
-		jw := transform.NewWriter(w, &stringify{})
+		tw := transform.NewWriter(w, quoteTransform{})
 
 		w.Header().Set("Content-type", "application/json")
-		fmt.Fprintf(w, `___eio[%s]("`, *j)
+		fmt.Fprintf(w, `___eio[%s]("`, j)
 
-		if err := next(jsonpResponseWriter{Writer: jw, ResponseWriter: w}, r); err != nil {
-			return err
-		}
+		next(quoteWriter{Writer: tw, ResponseWriter: w}, r)
+		tw.Close()
 
 		fmt.Fprint(w, `");`)
 

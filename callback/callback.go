@@ -2,9 +2,9 @@ package callback
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"reflect"
-	"strconv"
-	"strings"
 
 	seri "github.com/njones/socketio/serialize"
 )
@@ -12,12 +12,8 @@ import (
 type ErrorWrap func() error
 
 func (fn ErrorWrap) Callback(data ...interface{}) error { return fn() }
-func (ErrorWrap) Serialize() (string, error) {
-	return "", ErrStubSerialize
-}
-func (ErrorWrap) Unserialize(string) error {
-	return ErrStubUnserialize
-}
+func (ErrorWrap) Serialize() (string, error)            { return "", ErrStubSerialize }
+func (ErrorWrap) Unserialize(string) error              { return ErrStubUnserialize }
 
 type FuncString func(string)
 
@@ -32,12 +28,8 @@ func (fn FuncString) Callback(v ...interface{}) error {
 	}
 	return nil
 }
-func (FuncString) Serialize() (string, error) {
-	return "", ErrStubSerialize
-}
-func (FuncString) Unserialize(string) error {
-	return ErrStubUnserialize
-}
+func (FuncString) Serialize() (string, error) { return "", ErrStubSerialize }
+func (FuncString) Unserialize(string) error   { return ErrStubUnserialize }
 
 type Wrap struct {
 	Func       func() interface{} // func([T]...) error
@@ -73,38 +65,37 @@ func (fn Wrap) Callback(data ...interface{}) (err error) {
 		return ErrSingleOutParam
 	}
 
+	type inter interface{ Interface() interface{} }
+	type param interface{ Param() seri.Serializable }
+
 	in := make([]reflect.Value, f.Type().NumIn())
 	for i, val := range fn.Parameters {
-		switch v := data[i].(type) {
-		case string:
-			val.Unserialize(v)
-		case float64:
-			vStr := strconv.FormatFloat(v, 'f', 10, 64)
-			vStr = strings.TrimRight(vStr, ".0")
-			val.Unserialize(vStr)
+		if mint, ok := val.(param); ok {
+			val = mint.Param()
+		}
+
+		var v string
+		switch data[i].(type) {
+		case error:
+			in[i] = reflect.ValueOf(data[i].(error))
+		case io.Reader:
+			in[i] = reflect.ValueOf(data[i].(io.Reader))
 		default:
-			in[i] = reflect.ValueOf(v)
-			continue
+			v = fmt.Sprintf("%v", data[i]) // this should work for scalar types
+			val.Unserialize(v)
+			in[i] = reflect.ValueOf(val.(inter).Interface())
 		}
-		if vv, ok := val.(interface{ Interface() interface{} }); ok {
-			in[i] = reflect.ValueOf(vv.Interface())
-		} else {
-			return ErrInterfaceNotFound
-		}
+
 	}
 
 	res := f.Call(in)
-	erro := res[0].Interface()
-	if erro != nil {
-		return erro.(error)
+	rtnErr := res[0].Interface()
+	if rtnErr != nil {
+		return rtnErr.(error)
 	}
 
 	return nil
 }
 
-func (Wrap) Serialize() (string, error) {
-	return "", ErrStubSerialize
-}
-func (Wrap) Unserialize(string) error {
-	return ErrStubUnserialize
-}
+func (Wrap) Serialize() (string, error) { return "", ErrStubSerialize }
+func (Wrap) Unserialize(string) error   { return ErrStubUnserialize }

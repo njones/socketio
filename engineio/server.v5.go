@@ -5,7 +5,7 @@ package engineio
 
 const Version5 EIOVersionStr = "5"
 
-func init() { registery[Version5.Int()] = NewServerV5 }
+func init() { registry[Version5.Int()] = NewServerV5 }
 
 // https://github.com/socketio/engine.io/tree/fe5d97fc3d7a26d34bce786a97962fae3d7ce17f
 // https://github.com/socketio/engine.io/compare/3.5.x...4.1.x
