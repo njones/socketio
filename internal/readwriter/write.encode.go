@@ -1,70 +1,96 @@
 package readwriter
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"io"
+	"strings"
 )
 
-func (wtr *Writer) Encoder(fn encoderWriter) encoderEncode {
-	return wtrEncode{wtr: wtr, encode: fn.To(wtr.w)}
+func (wtr *Writer) UseEncoder(fn encWriter) *Writer {
+	return &Writer{w: wtr.w, enc: fn}
+}
+
+func (wtr *Writer) SetEncoder(fn encWriter) *Writer {
+	wtr.enc = fn
+	return wtr
+}
+
+func (wtr *Writer) Encode(v interface{}) wtrErr {
+	if wtr.enc != nil {
+		wtr.err = wtr.enc.To(wtr.w).Encode(v)
+		return onWtrErr{wtr}
+	}
+	switch val := v.(type) {
+	case string:
+		wtr.Write([]byte(val))
+	case []byte:
+		wtr.Write(val)
+	case io.Reader:
+		wtr.Copy(val)
+	}
+	return onWtrErr{wtr}
 }
 
 type (
-	fnEncode      func(interface{}) error
-	encoderWriter interface {
-		To(io.Writer) func(interface{}) error
+	encWriter interface {
+		To(io.Writer) encEncode
 	}
-	encoderEncode interface{ Encode(interface{}) wtrErr }
+	encEncode interface{ Encode(interface{}) error }
 )
 
-type wtrEncode struct {
-	wtr    *Writer
-	encode fnEncode
+type JSONEncoder func(io.Writer) *json.Encoder
+
+func (fn JSONEncoder) To(w io.Writer) encEncode {
+	return fn(w)
 }
 
-func (enc wtrEncode) Encode(v interface{}) wtrErr {
-	if enc.wtr.err != nil {
-		return enc.wtr
-	}
+type JSONEncoderStripNewline func(io.Writer) *json.Encoder
 
-	enc.wtr.err = enc.encode(v)
-	return onWtrErr{enc.wtr}
+func (fn JSONEncoderStripNewline) To(w io.Writer) encEncode {
+	return fn(&stripLastNewlineWriter{w})
 }
 
-func (wtr *Writer) Base64(enc *base64.Encoding) interface {
-	Copy(io.Reader) wtrErr
-	Bytes([]byte) wtrErr
-} {
-	if wtr.err != nil {
-		return wtr
-	}
+type Base64Encoder func(*base64.Encoding, io.Writer) io.WriteCloser
 
-	b64Wtr := base64.NewEncoder(enc, wtr.w)
-	return wtrB64{wtr: wtr, w: b64Wtr}
+func (fn Base64Encoder) To(w io.Writer) encEncode {
+	return b64e{w: fn(base64.StdEncoding, w)}
 }
 
-type wtrB64 struct {
-	wtr *Writer
-	w   io.WriteCloser
+type b64e struct{ w io.WriteCloser }
+
+func (be b64e) Encode(v interface{}) error {
+	switch val := v.(type) {
+	case string:
+		v = strings.NewReader(val)
+	case []byte:
+		v = bytes.NewReader(val)
+	case io.Reader:
+		v = val
+	case io.WriterTo:
+		_, err := val.WriteTo(be.w)
+		if err == nil {
+			be.w.Close()
+		}
+		return err
+	default:
+		return fmt.Errorf("val is not an io.Reader")
+	}
+	_, err := io.Copy(be.w, v.(io.Reader))
+	if err == nil {
+		err = be.w.Close()
+	}
+	return err
 }
 
-func (b64 wtrB64) Copy(src io.Reader) wtrErr {
-	if b64.wtr.err != nil {
-		return b64.wtr
-	}
+// This is because of https://golang.org/src/encoding/json/stream.go?s=4272:4319#L173
+type stripLastNewlineWriter struct{ w io.Writer }
 
-	_, b64.wtr.err = io.Copy(b64.w, src)
-	if b64.wtr.err == nil {
-		b64.wtr.err = b64.w.Close()
+func (snw *stripLastNewlineWriter) Write(p []byte) (n int, err error) {
+	if n = len(p) - 1; p[n] != '\n' { // assumes this is not in the middle of a write...
+		n++
 	}
-	return onWtrErr{b64.wtr}
-}
-
-func (b64 wtrB64) Bytes(p []byte) wtrErr {
-	if b64.wtr.err != nil {
-		return b64.wtr
-	}
-
-	_, b64.wtr.err = b64.w.Write(p)
-	return onWtrErr{b64.wtr}
+	return snw.w.Write(p[:n])
 }

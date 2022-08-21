@@ -2,53 +2,61 @@ package readwriter
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"io"
 )
 
-func (rdr *Reader) Decoder(fn decoderReader) decoderDecode {
-	return rdrDecode{rdr: rdr, decode: fn.From(rdr.r)}
+func (rdr *Reader) SetDecoder(fn decodeReader) *Reader {
+	rdr.dec = fn
+	return rdr
+}
+
+func (rdr *Reader) Decode(v interface{}) wtrErr {
+	if rdr.dec != nil {
+		rdr.err = rdr.dec.From(rdr.r).Decode(v)
+		return onRdrErr{rdr}
+	}
+	switch val := v.(type) {
+	case string:
+		rdr.Read([]byte(val))
+	case []byte:
+		//rdr.Write(val)
+	case io.Writer:
+		rdr.Copy(val)
+	default:
+		_ = val
+	}
+
+	return onRdrErr{rdr}
 }
 
 type (
-	fnDecode      func(interface{}) error
-	decoderReader interface {
-		From(io.Reader) func(interface{}) error
+	decodeReader interface {
+		From(io.Reader) decDecode
 	}
-	decoderDecode interface{ Decode(interface{}) rdrErr }
+	decDecode interface{ Decode(interface{}) error }
 )
 
-type rdrDecode struct {
-	rdr    *Reader
-	decode fnDecode
+type JSONDecoder func(io.Reader) *json.Decoder
+
+func (fn JSONDecoder) From(r io.Reader) decDecode {
+	return fn(r)
 }
 
-func (dec rdrDecode) Decode(v interface{}) rdrErr {
-	if dec.rdr.err != nil {
-		return dec.rdr
+type Base64Decoder func(*base64.Encoding, io.Reader) io.Reader
+
+func (fn Base64Decoder) From(r io.Reader) decDecode {
+	return b64d{r: fn(base64.StdEncoding, r)}
+}
+
+type b64d struct{ r io.Reader }
+
+func (bd b64d) Decode(v interface{}) error {
+	switch val := v.(type) {
+	case io.Writer:
+		_, err := io.Copy(val, bd.r)
+		return err
 	}
-	dec.rdr.err = dec.decode(v)
-	return onRdrErr{dec.rdr}
-}
-
-func (rdr *Reader) Base64(enc *base64.Encoding) interface{ Copy(io.Writer) rdrErr } {
-	if rdr.err != nil {
-		return rdr
-	}
-
-	b64Rdr := base64.NewDecoder(enc, rdr.r)
-	return rdrB64{rdr: rdr, r: b64Rdr}
-}
-
-type rdrB64 struct {
-	rdr *Reader
-	r   io.Reader
-}
-
-func (b64 rdrB64) Copy(dst io.Writer) rdrErr {
-	if b64.rdr.err != nil {
-		return b64.rdr
-	}
-
-	_, b64.rdr.err = io.Copy(dst, b64.r)
-	return onRdrErr{b64.rdr}
+	return fmt.Errorf("val is not an io.Writer")
 }

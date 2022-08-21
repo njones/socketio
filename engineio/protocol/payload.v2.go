@@ -37,10 +37,10 @@ func (dec *PayloadDecoderV2) Decode(payload *PayloadV2) error {
 	return dec.read.ConvertErr(io.EOF, nil).Err()
 }
 
-type PayloadEncoderV2 struct{ write *rw.Writer }
+type PayloadEncoderV2 struct{ write *writer }
 
 var NewPayloadEncoderV2 _payloadEncoderV2 = func(w io.Writer) *PayloadEncoderV2 {
-	return &PayloadEncoderV2{write: rw.NewWriter(w)}
+	return &PayloadEncoderV2{write: &writer{Writer: rw.NewWriter(w)}}
 }
 
 func (enc *PayloadEncoderV2) Encode(payload PayloadV2) error {

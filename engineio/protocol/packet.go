@@ -1,8 +1,9 @@
 package protocol
 
 import (
-	"encoding/json"
 	"io"
+
+	"github.com/njones/socketio/internal/readwriter"
 )
 
 const (
@@ -27,17 +28,11 @@ const (
 )
 
 type (
-	_packetJSONDecoder func(io.Reader) *json.Decoder
-	_packetJSONEncoder func(io.Writer) *json.Encoder
+	_packetJSONDecoder   = readwriter.JSONDecoder
+	_packetBase64Decoder = readwriter.Base64Decoder
+	_packetJSONEncoder   = readwriter.JSONEncoderStripNewline
+	_packetBase64encoder = readwriter.Base64Encoder
 )
-
-func (fn _packetJSONDecoder) From(r io.Reader) func(interface{}) error { return fn(r).Decode }
-func (fn _packetJSONEncoder) To(w io.Writer) func(interface{}) error {
-	return fn(&stripLastNewlineWriter{w}).Encode
-}
-
-func newJSONDecoder() _packetJSONDecoder { return json.NewDecoder }
-func newJSONEncoder() _packetJSONEncoder { return json.NewEncoder }
 
 type Packet struct {
 	T PacketType  `json:"type"`
@@ -57,7 +52,7 @@ func (pac Packet) Len() int {
 	case nil:
 		return n
 	case string:
-		return n + len(d)
+		return n + len([]rune(d))
 	case useLen:
 		return n + d.Len()
 	}

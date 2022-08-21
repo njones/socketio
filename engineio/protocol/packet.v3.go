@@ -5,6 +5,7 @@ package protocol
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 
 	rw "github.com/njones/socketio/internal/readwriter"
@@ -37,7 +38,7 @@ func (dec *PacketDecoderV3) Decode(packet *PacketV3) error {
 	switch packet.T {
 	case OpenPacket:
 		var data HandshakeV3
-		dec.read.Decoder(newJSONDecoder()).Decode(&data)
+		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data)
 		packet.D = data
 		return dec.read.Err()
 	}
@@ -72,7 +73,7 @@ func (enc *PacketEncoderV3) Encode(packet PacketV3) (err error) {
 				data.Upgrades = []string{}
 			}
 			enc.write.Bytes(packet.T.Bytes()).OnErr(ErrPacketEncode)
-			enc.write.Encoder(newJSONEncoder()).Encode(data).OnErrF(ErrPacketEncode, "v3", enc.write.Err())
+			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrHandshakeEncode, "v3", enc.write.Err())
 		default:
 			return ErrInvalidHandshake.F("v3")
 		}

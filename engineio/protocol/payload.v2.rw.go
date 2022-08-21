@@ -27,10 +27,5 @@ func (rdr *reader) packetLen() (n int64) {
 }
 
 func (rdr *reader) payload(n int64) io.Reader {
-	pr, pw := io.Pipe()
-	go func() {
-		CopyRuneN(pw, rdr.Bufio(), n)
-		pw.Close()
-	}()
-	return pr
+	return LimitRuneReader(rdr.Bufio(), n)
 }

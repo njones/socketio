@@ -14,6 +14,7 @@ type wtrErr interface {
 
 type Writer struct {
 	w   *bufio.Writer
+	enc encWriter
 	err error
 }
 
@@ -29,4 +30,9 @@ func (wtr *Writer) OnErr(errs.String)                  {}
 func (wtr *Writer) OnErrF(errs.String, ...interface{}) {}
 func (wtr *Writer) Write(p []byte) (n int, err error)  { return wtr.w.Write(p) }
 
-func NewWriter(w io.Writer) *Writer { return &Writer{w: bufio.NewWriter(w)} }
+func NewWriter(w io.Writer) *Writer {
+	if ww, ok := w.(interface{ PropagateWriter() *Writer }); ok {
+		return ww.PropagateWriter()
+	}
+	return &Writer{w: bufio.NewWriter(w)}
+}

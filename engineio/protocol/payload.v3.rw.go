@@ -72,3 +72,34 @@ func (rdr *reader) decodeXHR2(payload *PayloadV3) error {
 
 	return rdr.ConvertErr(io.EOF, nil).Err()
 }
+
+// Writer methods
+
+func (wtr *writer) writeBinaryPacketLen(n int) {
+	for _, r := range []byte(strconv.Itoa(n)) {
+		wtr.Write([]byte{r - '0'})
+	}
+}
+
+func (wtr *writer) encodeXHR2(packet PacketV3) error {
+	switch {
+	case packet.IsBinary:
+		wtr.Write([]byte{0x01})
+	default:
+		wtr.Write([]byte{0x00})
+	}
+
+	switch val := packet.D.(type) {
+	case string:
+		wtr.writeBinaryPacketLen(len([]byte(val)) + 1) // +1 for the message type
+		wtr.Write([]byte{0xFF})
+		wtr.Write(packet.T.Bytes())
+		wtr.Write([]byte(val))
+	case io.Reader:
+		wtr.writeBinaryPacketLen(packet.Len() - 1) // -1 for the message type
+		wtr.Write([]byte{0xFF})
+		wtr.Copy(val)
+	}
+
+	return wtr.Err()
+}

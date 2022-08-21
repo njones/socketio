@@ -26,6 +26,7 @@ type rdrCondBool interface {
 
 type Reader struct {
 	r   *bufio.Reader
+	dec decodeReader
 	err error
 }
 

@@ -4,6 +4,7 @@
 package protocol
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -36,7 +37,7 @@ func (dec *PacketDecoderV2) Decode(packet *PacketV2) error {
 	switch packetType := packet.T; packetType {
 	case OpenPacket:
 		var data HandshakeV2
-		dec.read.Decoder(newJSONDecoder()).Decode(&data).OnErrF(ErrHandshakeDecode, "v2", dec.read.Err())
+		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data).OnErrF(ErrHandshakeDecode, "v2", dec.read.Err())
 		packet.D = &data
 	case MessagePacket:
 		var data = new(strings.Builder)
@@ -78,7 +79,7 @@ func (enc *PacketEncoderV2) Encode(packet PacketV2) (err error) {
 				data.Upgrades = []string{}
 			}
 			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrHandshakeEncode, "v2", enc.write.Err())
-			enc.write.Encoder(newJSONEncoder()).Encode(data).OnErrF(ErrHandshakeEncode, "v2", enc.write.Err())
+			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrHandshakeEncode, "v2", enc.write.Err())
 		default:
 			return ErrInvalidHandshake.F("v2")
 		}
@@ -88,10 +89,13 @@ func (enc *PacketEncoderV2) Encode(packet PacketV2) (err error) {
 			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
 		case string:
 			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
-			enc.write.String(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+		case []byte:
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
 		case io.WriterTo:
 			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
-			enc.write.To(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
 		default:
 			return ErrInvalidPacketData.F(fmt.Sprintf("unexpected data type of: %T", data))
 		}
