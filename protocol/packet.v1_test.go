@@ -2,37 +2,36 @@ package protocol
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-type testoption func(*testing.T)
-
-type testReadV1 func(PacketV1, []byte, error) func(*testing.T)
-type testWriteV1 func([]byte, PacketV1, error) func(*testing.T)
+type testOption func(*testing.T)
 
 var notAuthorized = "Not authorized"
 
-func mergeReadV1(dst, src map[string]func() (PacketV1, []byte, error)) {
-	for k, v := range src {
-		dst[k] = v
-	}
-}
+var testingName = strings.NewReplacer(" ", "_")
 
-func mergeWriteV1(dst, src map[string]func() ([]byte, PacketV1, error)) {
-	for k, v := range src {
-		dst[k] = v
-	}
-}
-
-func runTest(testnames ...string) testoption {
+func runTest(testNames ...string) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
-		names := strings.SplitN(t.Name(), "/", 2)
-		for _, testname := range testnames {
-			if names[len(names)-1] == strings.ReplaceAll(testname, " ", "_") {
+
+		have := strings.SplitN(t.Name(), "/", 2)[1]
+		suffix := strings.Split(have, ".")[1]
+
+		for _, testName := range testNames {
+			if testName == "" || testName == "*" {
+				return
+			}
+
+			want := testingName.Replace(testName)
+			if !strings.Contains(want, ".") {
+				want += "." + suffix
+			}
+			if have == want {
 				return
 			}
 		}
@@ -40,78 +39,86 @@ func runTest(testnames ...string) testoption {
 	}
 }
 
-func skipTest(testnames ...string) testoption {
+func skipTest(testNames ...string) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
-		names := strings.SplitN(t.Name(), "/", 2)
-		for _, testname := range testnames {
-			if names[len(names)-1] == strings.ReplaceAll(testname, " ", "_") {
+
+		have := strings.SplitN(t.Name(), "/", 2)[1]
+		suffix := strings.Split(have, ".")[1]
+
+		for _, testName := range testNames {
+			want := testingName.Replace(testName)
+			if !strings.Contains(want, ".") {
+				want += "." + suffix
+			}
+			if have == want {
 				t.SkipNow()
-				return
 			}
 		}
 	}
 }
 
 func TestPacketV1Read(t *testing.T) {
-	var opts []testoption
+	var opts = []func(*testing.T){}
 
-	testchecks := map[string]func(checks ...testoption) testReadV1{
-		".ReadFrom": func(checks ...testoption) testReadV1 {
-			return func(pac PacketV1, want []byte, xerr error) func(*testing.T) {
-				return func(t *testing.T) {
-					for _, check := range checks {
-						check(t)
-					}
+	type (
+		testFn          func(*testing.T)
+		testParamsInFn  func(pac PacketV1, want []byte, xerr error) testFn
+		testParamsOutFn func(*testing.T) (pac PacketV1, want []byte, xerr error)
+	)
 
-					var have = new(bytes.Buffer)
-					n, err := have.ReadFrom(&pac)
-					assert.Equal(t, int64(len(want)), n)
-					assert.Equal(t, xerr, err)
-
-					assert.Equal(t, want, have.Bytes())
+	runWithOptions := map[string]testParamsInFn{
+		"ReadFrom": func(pac PacketV1, want []byte, xerr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					opt(t)
 				}
+
+				var have = new(bytes.Buffer)
+				n, err := have.ReadFrom(&pac)
+				assert.Equal(t, int64(len(want)), n)
+				assert.Equal(t, xerr, err)
+
+				assert.Equal(t, want, have.Bytes())
 			}
 		},
-		".WriteTo": func(checks ...testoption) testReadV1 {
-			return func(pac PacketV1, want []byte, xerr error) func(*testing.T) {
-				return func(t *testing.T) {
-					for _, check := range checks {
-						check(t)
-					}
-
-					var have = new(bytes.Buffer)
-					n, err := pac.WriteTo(have)
-					assert.Equal(t, int64(len(want)), n)
-					assert.Equal(t, xerr, err)
-
-					assert.Equal(t, want, have.Bytes())
+		"WriteTo": func(pac PacketV1, want []byte, xerr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					opt(t)
 				}
+
+				var have = new(bytes.Buffer)
+				n, err := pac.WriteTo(have)
+				assert.Equal(t, int64(len(want)), n)
+				assert.Equal(t, xerr, err)
+
+				assert.Equal(t, want, have.Bytes())
 			}
 		},
 	}
 
-	spec := map[string]func() (PacketV1, []byte, error){
-		"CONNECT": func() (PacketV1, []byte, error) {
+	spec := map[string]testParamsOutFn{
+		"CONNECT": func(*testing.T) (PacketV1, []byte, error) {
 			want := []byte(`0`)
 			data := *NewPacketV1().(*PacketV1)
 			return data, want, nil
 		},
-		"DISCONNECT": func() (PacketV1, []byte, error) {
+		"DISCONNECT": func(*testing.T) (PacketV1, []byte, error) {
 			want := []byte(`1/admin`)
 			data := *NewPacketV1().
 				WithType(DisconnectPacket.Byte()).
 				WithNamespace("/admin").(*PacketV1)
 			return data, want, nil
 		},
-		"EVENT": func() (PacketV1, []byte, error) {
+		"EVENT": func(*testing.T) (PacketV1, []byte, error) {
 			want := []byte(`2["hello",1]`)
 			data := *NewPacketV1().
 				WithType(EventPacket.Byte()).
 				WithData([]interface{}{"hello", 1.0}).(*PacketV1)
 			return data, want, nil
 		},
-		"EVENT with AckID": func() (PacketV1, []byte, error) {
+		"EVENT with AckID": func(*testing.T) (PacketV1, []byte, error) {
 			want := []byte(`2/admin,456["project:delete",123]`)
 			data := *NewPacketV1().
 				WithType(EventPacket.Byte()).
@@ -120,7 +127,7 @@ func TestPacketV1Read(t *testing.T) {
 				WithAckID(456).(*PacketV1)
 			return data, want, nil
 		},
-		"ACK": func() (PacketV1, []byte, error) {
+		"ACK": func(*testing.T) (PacketV1, []byte, error) {
 			want := []byte(`3/admin,456[]`)
 			data := *NewPacketV1().
 				WithType(AckPacket.Byte()).
@@ -129,7 +136,7 @@ func TestPacketV1Read(t *testing.T) {
 				WithAckID(456).(*PacketV1)
 			return data, want, nil
 		},
-		"ERROR": func() (PacketV1, []byte, error) {
+		"ERROR": func(*testing.T) (PacketV1, []byte, error) {
 			want := []byte(`4/admin,"Not authorized"`)
 			data := *NewPacketV1().
 				WithType(ErrorPacket.Byte()).
@@ -137,22 +144,21 @@ func TestPacketV1Read(t *testing.T) {
 				WithData(&notAuthorized).(*PacketV1)
 			return data, want, nil
 		},
-	}
 
-	extra := map[string]func() (PacketV1, []byte, error){
-		"CONNECT /admin ns": func() (PacketV1, []byte, error) {
+		// extra
+		"CONNECT /admin ns": func(*testing.T) (PacketV1, []byte, error) {
 			want := []byte(`0/admin`)
 			data := *NewPacketV1().
 				WithNamespace("/admin").(*PacketV1)
 			return data, want, nil
 		},
-		"CONNECT /admin ns and extra info": func() (PacketV1, []byte, error) {
+		"CONNECT /admin ns and extra info": func(*testing.T) (PacketV1, []byte, error) {
 			want := []byte(`0/admin?token=1234&uid=abcd`)
 			data := *NewPacketV1().
 				WithNamespace("/admin?token=1234&uid=abcd").(*PacketV1)
 			return data, want, nil
 		},
-		"EVENT with Binary": func() (PacketV1, []byte, error) {
+		"EVENT with Binary": func(*testing.T) (PacketV1, []byte, error) {
 			want := []byte(`2[]`)
 			data := *NewPacketV1().
 				WithType(EventPacket.Byte()).
@@ -160,7 +166,7 @@ func TestPacketV1Read(t *testing.T) {
 				WithData([]interface{}{strings.NewReader("binary data")}).(*PacketV1)
 			return data, want, ErrBinaryDataUnsupported
 		},
-		"EVENT with Object": func() (PacketV1, []byte, error) {
+		"EVENT with Object": func(*testing.T) (PacketV1, []byte, error) {
 			want := []byte(`2["hello",{"playground":"world","wake":{"won":["too",3]}}]`)
 			data := *NewPacketV1().
 				WithType(EventPacket.Byte()).
@@ -174,22 +180,27 @@ func TestPacketV1Read(t *testing.T) {
 		},
 	}
 
-	mergeReadV1(extra, spec)
-	for name, testing := range extra {
-		for fill, testcheck := range testchecks {
-			t.Run(name+fill, testcheck(opts...)(testing()))
+	for name, testParams := range spec {
+		for suffix, run := range runWithOptions {
+			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)))
 		}
 	}
 }
 
 func TestWritePacketV1(t *testing.T) {
-	var opts []testoption
+	var opts = []func(*testing.T){runTest("")}
 
-	testcheck := func(checks ...testoption) testWriteV1 {
-		return func(data []byte, want PacketV1, xerr error) func(*testing.T) {
+	type (
+		testFn          func(*testing.T)
+		testParamsInFn  func(want []byte, pac PacketV1, xerr error) testFn
+		testParamsOutFn func(*testing.T) (want []byte, pac PacketV1, xerr error)
+	)
+
+	runWithOptions := map[string]testParamsInFn{
+		"Write": func(data []byte, want PacketV1, xerr error) testFn {
 			return func(t *testing.T) {
-				for _, check := range checks {
-					check(t)
+				for _, opt := range opts {
+					opt(t)
 				}
 
 				var pac PacketV1
@@ -202,23 +213,23 @@ func TestWritePacketV1(t *testing.T) {
 				assert.Equal(t, want.Namespace, pac.Namespace, "the namespace:")
 				assert.Equal(t, want.AckID, pac.AckID, "the ackID")
 			}
-		}
+		},
 	}
 
-	spec := map[string]func() ([]byte, PacketV1, error){
-		"CONNECT": func() ([]byte, PacketV1, error) {
+	spec := map[string]testParamsOutFn{
+		"CONNECT": func(*testing.T) ([]byte, PacketV1, error) {
 			data := []byte(`0`)
 			want := *NewPacketV1().WithNamespace("/").(*PacketV1)
 			return data, want, nil
 		},
-		"DISCONNECT": func() ([]byte, PacketV1, error) {
+		"DISCONNECT": func(*testing.T) ([]byte, PacketV1, error) {
 			data := []byte(`1`)
 			want := *NewPacketV1().
 				WithType(DisconnectPacket.Byte()).
 				WithNamespace("/").(*PacketV1)
 			return data, want, nil
 		},
-		"EVENT": func() ([]byte, PacketV1, error) {
+		"EVENT": func(*testing.T) ([]byte, PacketV1, error) {
 			data := []byte(`2["hello",1]`)
 			want := *NewPacketV1().
 				WithType(EventPacket.Byte()).
@@ -227,7 +238,7 @@ func TestWritePacketV1(t *testing.T) {
 			return data,
 				want, nil
 		},
-		"EVENT with AckID": func() ([]byte, PacketV1, error) {
+		"EVENT with AckID": func(*testing.T) ([]byte, PacketV1, error) {
 			data := []byte(`2/admin,456["project:delete",123]`)
 			want := *NewPacketV1().
 				WithType(EventPacket.Byte()).
@@ -236,7 +247,7 @@ func TestWritePacketV1(t *testing.T) {
 				WithAckID(456).(*PacketV1)
 			return data, want, nil
 		},
-		"ACK": func() ([]byte, PacketV1, error) {
+		"ACK": func(*testing.T) ([]byte, PacketV1, error) {
 			data := []byte(`3/admin,456[]`)
 			want := *NewPacketV1().
 				WithType(AckPacket.Byte()).
@@ -245,7 +256,7 @@ func TestWritePacketV1(t *testing.T) {
 				WithAckID(456).(*PacketV1)
 			return data, want, nil
 		},
-		"ERROR": func() ([]byte, PacketV1, error) {
+		"ERROR": func(*testing.T) ([]byte, PacketV1, error) {
 			data := []byte(`4/admin,"Not authorized"`)
 			want := *NewPacketV1().
 				WithType(ErrorPacket.Byte()).
@@ -253,10 +264,9 @@ func TestWritePacketV1(t *testing.T) {
 				WithData(notAuthorized).(*PacketV1)
 			return data, want, nil
 		},
-	}
 
-	extra := map[string]func() ([]byte, PacketV1, error){
-		"EVENT with Binary": func() ([]byte, PacketV1, error) {
+		// extra
+		"EVENT with Binary": func(*testing.T) ([]byte, PacketV1, error) {
 			data := []byte(`2["unknown", {"base64":true,"data":"xAtiaW5hcnkgZGF0YQ=="}]`)
 			want := *NewPacketV1().
 				WithType(EventPacket.Byte()).
@@ -269,9 +279,9 @@ func TestWritePacketV1(t *testing.T) {
 		},
 	}
 
-	mergeWriteV1(extra, spec)
-
-	for name, testing := range extra {
-		t.Run(name, testcheck(opts...)(testing()))
+	for name, testParams := range spec {
+		for suffix, run := range runWithOptions {
+			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)))
+		}
 	}
 }

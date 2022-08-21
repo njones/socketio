@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -9,45 +10,47 @@ import (
 )
 
 func TestReadPayloadV4(t *testing.T) {
-	var opts []testoption
+	var opts = []func(*testing.T){}
 
-	runWithOptions := map[string]func(opts ...testoption) func(string, PayloadV4, bool, error) func(*testing.T){
-		".Decode": func(opts ...testoption) func(string, PayloadV4, bool, error) func(*testing.T) {
-			return func(data string, want PayloadV4, isXHR2 bool, xerr error) func(*testing.T) {
-				return func(t *testing.T) {
-					for _, opt := range opts {
-						opt(t)
-					}
+	type (
+		testFn          func(*testing.T)
+		testParamsInFn  func(data string, want PayloadV4, isXHR2 bool, xerr error) testFn
+		testParamsOutFn func(*testing.T) (data string, want PayloadV4, isXHR2 bool, xerr error)
+	)
 
-					var have PayloadV4
-					var dec = NewPayloadDecoderV4(strings.NewReader(data))
-					dec.IsXHR2 = isXHR2
-					var err = dec.Decode(&have)
-
-					assert.ErrorIs(t, err, xerr)
-					assert.Equal(t, want, have)
+	runWithOptions := map[string]testParamsInFn{
+		"Decode": func(data string, want PayloadV4, isXHR2 bool, xerr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					opt(t)
 				}
+
+				var have PayloadV4
+				var dec = NewPayloadDecoderV4(strings.NewReader(data))
+				dec.hasXHR2Support = isXHR2
+				var err = dec.Decode(&have)
+
+				assert.ErrorIs(t, err, xerr)
+				assert.Equal(t, want, have)
 			}
 		},
-		".ReadPayload": func(opts ...testoption) func(string, PayloadV4, bool, error) func(*testing.T) {
-			return func(data string, want PayloadV4, isXHR2 bool, xerr error) func(*testing.T) {
-				return func(t *testing.T) {
-					for _, opt := range opts {
-						opt(t)
-					}
-
-					var have PayloadV4
-					var err = NewPayloadDecoderV4.From(strings.NewReader(data)).ReadPayload(&have)
-
-					assert.ErrorIs(t, err, xerr)
-					assert.Equal(t, want, have)
+		"ReadPayload": func(data string, want PayloadV4, isXHR2 bool, xerr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					opt(t)
 				}
+
+				var have PayloadV4
+				var err = NewPayloadDecoderV4.From(strings.NewReader(data)).ReadPayload(&have)
+
+				assert.ErrorIs(t, err, xerr)
+				assert.Equal(t, want, have)
 			}
 		},
 	}
 
-	spec := map[string]func() (string, PayloadV4, bool, error){
-		"Without Binary": func() (string, PayloadV4, bool, error) {
+	spec := map[string]testParamsOutFn{
+		"Without Binary": func(*testing.T) (string, PayloadV4, bool, error) {
 			isBinary, isXHR2 := false, false
 			data := "4hello\x1e4€"
 			want := PayloadV4{
@@ -56,7 +59,7 @@ func TestReadPayloadV4(t *testing.T) {
 			}
 			return data, want, isXHR2, nil
 		},
-		"With Binary": func() (string, PayloadV4, bool, error) {
+		"With Binary": func(*testing.T) (string, PayloadV4, bool, error) {
 			isBinary, isXHR2 := true, false
 			data := "4€\x1ebAQIDBA=="
 			want := PayloadV4{
@@ -67,52 +70,54 @@ func TestReadPayloadV4(t *testing.T) {
 		},
 	}
 
-	for name, testing := range spec {
-		for suffix, runWithOption := range runWithOptions {
-			t.Run(name+suffix, runWithOption(opts...)(testing()))
+	for name, testParams := range spec {
+		for suffix, run := range runWithOptions {
+			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)))
 		}
 	}
 }
 
 func TestWritePayloadV4(t *testing.T) {
-	var opts []testoption
+	var opts = []func(*testing.T){}
 
-	runWithOptions := map[string]func(opts ...testoption) func(PayloadV4, string, bool, error) func(*testing.T){
-		".Encode": func(opts ...testoption) func(PayloadV4, string, bool, error) func(*testing.T) {
-			return func(data PayloadV4, want string, isXHR2 bool, xerr error) func(*testing.T) {
-				return func(t *testing.T) {
-					for _, opt := range opts {
-						opt(t)
-					}
+	type (
+		testFn          func(*testing.T)
+		testParamsInFn  func(data PayloadV4, want string, isXHR2 bool, xerr error) testFn
+		testParamsOutFn func(*testing.T) (data PayloadV4, want string, isXHR2 bool, xerr error)
+	)
 
-					var have = new(bytes.Buffer)
-					var enc = NewPayloadEncoderV4(have)
-					var err = enc.Encode(data)
-
-					assert.ErrorIs(t, err, xerr)
-					assert.Equal(t, want, have.String())
+	runWithOptions := map[string]testParamsInFn{
+		"Encode": func(data PayloadV4, want string, isXHR2 bool, xerr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					opt(t)
 				}
+
+				var have = new(bytes.Buffer)
+				var enc = NewPayloadEncoderV4(have)
+				var err = enc.Encode(data)
+
+				assert.ErrorIs(t, err, xerr)
+				assert.Equal(t, want, have.String())
 			}
 		},
-		".WritePayload": func(opts ...testoption) func(PayloadV4, string, bool, error) func(*testing.T) {
-			return func(data PayloadV4, want string, isXHR2 bool, xerr error) func(*testing.T) {
-				return func(t *testing.T) {
-					for _, opt := range opts {
-						opt(t)
-					}
-
-					var have = new(bytes.Buffer)
-					var err = NewPayloadEncoderV4.To(have).WritePayload(data)
-
-					assert.ErrorIs(t, err, xerr)
-					assert.Equal(t, want, have.String())
+		"WritePayload": func(data PayloadV4, want string, isXHR2 bool, xerr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					opt(t)
 				}
+
+				var have = new(bytes.Buffer)
+				var err = NewPayloadEncoderV4.To(have).WritePayload(data)
+
+				assert.ErrorIs(t, err, xerr)
+				assert.Equal(t, want, have.String())
 			}
 		},
 	}
 
-	spec := map[string]func() (PayloadV4, string, bool, error){
-		"Without Binary": func() (PayloadV4, string, bool, error) {
+	spec := map[string]testParamsOutFn{
+		"Without Binary": func(*testing.T) (PayloadV4, string, bool, error) {
 			isBinary, isXHR2 := false, false
 			want := "4hello\x1e4€"
 			data := PayloadV4{
@@ -121,7 +126,7 @@ func TestWritePayloadV4(t *testing.T) {
 			}
 			return data, want, isXHR2, nil
 		},
-		"With Binary": func() (PayloadV4, string, bool, error) {
+		"With Binary": func(*testing.T) (PayloadV4, string, bool, error) {
 			isBinary, isXHR2 := true, false
 			want := "4€\x1ebAQIDBA=="
 			data := PayloadV4{
@@ -132,9 +137,9 @@ func TestWritePayloadV4(t *testing.T) {
 		},
 	}
 
-	for name, testing := range spec {
-		for suffix, runWithOption := range runWithOptions {
-			t.Run(name+suffix, runWithOption(opts...)(testing()))
+	for name, testParams := range spec {
+		for suffix, run := range runWithOptions {
+			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)))
 		}
 	}
 }

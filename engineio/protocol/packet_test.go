@@ -1,14 +1,24 @@
 package protocol
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPacketLength(t *testing.T) {
-	runWithOption := func(opts ...testoption) func(Packet, int) func(*testing.T) {
-		return func(data Packet, want int) func(*testing.T) {
+	var opts = []func(*testing.T){}
+
+	type (
+		testFn          func(*testing.T)
+		testParamsInFn  func(data Packet, want int) testFn
+		testParamsOutFn func(*testing.T) (data Packet, want int)
+	)
+
+	runWithOptions := map[string]testParamsInFn{
+		"Basic": func(data Packet, want int) testFn {
 			return func(*testing.T) {
 				for _, opt := range opts {
 					opt(t)
@@ -17,14 +27,14 @@ func TestPacketLength(t *testing.T) {
 				length := data.Len()
 				assert.Equal(t, want, length)
 			}
-		}
+		},
 	}
 
-	var values = func(a Packet, b int) func() (Packet, int) {
-		return func() (Packet, int) { return a, b }
+	var values = func(a Packet, b int) func(*testing.T) (Packet, int) {
+		return func(*testing.T) (Packet, int) { return a, b }
 	}
 
-	tests := map[string]func() (data Packet, want int){
+	tests := map[string]testParamsOutFn{
 		"Open":              values(Packet{T: OpenPacket, D: new(HandshakeV2)}, 41),
 		"Close":             values(Packet{T: ClosePacket}, 1),
 		"Message with Text": values(Packet{T: MessagePacket, D: "HelloWorld"}, 11),
@@ -32,19 +42,21 @@ func TestPacketLength(t *testing.T) {
 		"Open with Handshake v2": values(Packet{T: OpenPacket, D: &HandshakeV2{
 			SID:         "The ID here",
 			Upgrades:    []string{},
-			PingTimeout: 5000,
+			PingTimeout: Duration(5000 * time.Millisecond),
 		}}, len(`0{"sid":"The ID here","upgrades":[],"pingTimeout":5000}`)),
 		"Open with Handshake v3": values(Packet{T: OpenPacket, D: &HandshakeV3{
 			HandshakeV2: HandshakeV2{
 				SID:         "The ID here",
 				Upgrades:    []string{},
-				PingTimeout: 5000,
+				PingTimeout: Duration(5000 * time.Millisecond),
 			},
-			PingInterval: 5000,
+			PingInterval: Duration(5000 * time.Millisecond),
 		}}, len(`0{"sid":"The ID here","upgrades":[],"pingTimeout":5000,"pingInterval":5000}`)),
 	}
 
-	for name, testing := range tests {
-		t.Run(name, runWithOption()(testing()))
+	for name, testParams := range tests {
+		for suffix, run := range runWithOptions {
+			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)))
+		}
 	}
 }

@@ -1,6 +1,7 @@
 package tmap_test
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,167 +12,166 @@ import (
 	tmap "github.com/njones/socketio/adaptor/transport/map"
 	eiop "github.com/njones/socketio/engineio/protocol"
 	eiot "github.com/njones/socketio/engineio/transport"
+	itest "github.com/njones/socketio/internal/test"
 	siop "github.com/njones/socketio/protocol"
 	sess "github.com/njones/socketio/session"
 	siot "github.com/njones/socketio/transport"
 	"github.com/stretchr/testify/assert"
 )
 
+var runTest, skipTest = itest.RunTest, itest.SkipTest
+
 func TestMapTransportSet(t *testing.T) {
-	tsp := tmap.NewMapTransport(siop.NewPacketV2)
-	id := "sio:aaa"
-	a := siot.SocketID(id)
+	memTransport := tmap.NewMapTransport(siop.NewPacketV2)
+	sidStr := "sio:aaa"
+	sid := siot.SocketID(sidStr)
 
-	nilSocketID := tsp.Receive(a)
-	assert.Nil(t, nilSocketID)
+	SocketID_𖣠 := memTransport.Receive(sid)
+	assert.Nil(t, SocketID_𖣠)
 
-	tspr := newMockTransporter(id)
-	err := tsp.Set(a, tspr)
+	transport := newMockTransporter(sidStr)
+	err := memTransport.Set(sid, transport)
 	assert.NoError(t, err)
 
-	socketID := tsp.Receive(a)
-	assert.NotNil(t, socketID)
+	socketID_ꤶ := memTransport.Receive(sid)
+	assert.NotNil(t, socketID_ꤶ)
 }
 
-func TestMapTransportSend(t *testing.T) {
-	sess.GenerateID = func() tmap.SocketID { return tmap.SocketID("ABC123") }
-
-	c := eiot.Codec{
-		PacketEncoder:  eiop.NewPacketEncoderV2,
-		PacketDecoder:  eiop.NewPacketDecoderV2,
-		PayloadEncoder: eiop.NewPayloadEncoderV2,
-		PayloadDecoder: eiop.NewPayloadDecoderV2,
-	}
-
-	wgrp := new(sync.WaitGroup)
-
-	etr := eiot.NewPollingTransport(1000, 10*time.Millisecond)(tmap.SessionID("12345"), c)
-	str := tmap.NewMapTransport(siop.NewPacketV2)
-
-	sid, err := str.Add(etr)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	errChan := make(chan error, 1)
-	rec := httptest.NewRecorder()
-
-	wgrp.Add(1)
-	go func() {
-		defer wgrp.Done()
-		req, err := http.NewRequest("GET", "/", nil)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		errChan <- etr.Run(rec, req)
-	}()
-
-	str.Send(sid, "This is cool")
-	wgrp.Wait()
-
-	if err := <-errChan; err != nil {
-		t.Fatal(err)
-	}
-
-	have := rec.Body.String()
-	want := thisIsCoolText
-
-	assert.Equal(t, want, have)
-}
-
-var thisIsCoolText = `16:40"This is cool"`
-
-func TestMapTransportReceive(t *testing.T) {
-	sess.GenerateID = func() tmap.SocketID { return tmap.SocketID("ABC123") }
-
-	c := eiot.Codec{
-		PacketEncoder:  eiop.NewPacketEncoderV2,
-		PacketDecoder:  eiop.NewPacketDecoderV2,
-		PayloadEncoder: eiop.NewPayloadEncoderV2,
-		PayloadDecoder: eiop.NewPayloadDecoderV2,
-	}
-
-	wgrp := new(sync.WaitGroup)
-
-	etr := eiot.NewPollingTransport(1000, 10*time.Millisecond)(tmap.SessionID("12345"), c)
-	str := tmap.NewMapTransport(siop.NewPacketV2)
-
-	sid, err := str.Add(etr)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	errChan := make(chan error, 1)
-	rec := httptest.NewRecorder()
-
-	wgrp.Add(1)
-	go func() {
-		defer wgrp.Done()
-
-		req, err := http.NewRequest("POST", "/", strings.NewReader(thisIsCoolText))
-		if err != nil {
-			errChan <- err
-			return
-		}
-
-		errChan <- etr.Run(rec, req)
-	}()
-	wgrp.Wait()
-
-	if err := <-errChan; err != nil {
-		t.Fatal(err)
-	}
-
-	data := "This is cool"
-
-	have := <-str.Receive(sid)
-	want := tmap.Socket{
-		Type:      byte(eiop.OpenPacket),
-		Namespace: "/",
-		AckID:     0x0,
-		Data:      &data,
-	}
-
-	assert.Equal(t, want, have)
-}
-
-// Test for an AckID
 func TestTransportAckID(t *testing.T) {
-	tsp := tmap.NewMapTransport(siop.NewPacketV2)
+	memTransport := tmap.NewMapTransport(siop.NewPacketV2)
 
-	// test to make sure the atomic incrementing works if we get
-	// concurrent calls to AckID
+	collect := make(chan [2]uint64, 100)
+	unꢠ := new(sync.WaitGroup)
+	waitUntilDoneLooping := make(chan struct{})
 
-	wg := new(sync.WaitGroup)
-	ch := make(chan uint64, 100)
-	wait := make(chan struct{})
-	for i := 0; i < 100; i++ {
-
-		wg.Add(1)
-		go func() {
-			<-wait // wait until we are done looping
-			ch <- tsp.AckID()
-			wg.Done()
-		}()
-	}
-	close(wait) // now fire all go routines at the same time
-
-	wg.Wait()
-	close(ch)
-
-	cm := map[uint64]struct{}{}
-	for i := range ch {
-		cm[i] = struct{}{}
+	loop := 100
+	for i := 0; i < loop; i++ {
+		unꢠ.Add(1)
+		go func(n int) {
+			<-waitUntilDoneLooping
+			collect <- [2]uint64{uint64(n), memTransport.AckID()}
+			unꢠ.Done()
+		}(i)
 	}
 
-	if len(cm) != 100 {
-		t.Log("got:", len(cm))
-		t.Fatal("it looks like atomic didn't work as expected.")
+	close(waitUntilDoneLooping) // now fire all go routines at the same time
+	unꢠ.Wait()                  // wait until all of the go routines have fired
+	close(collect)              // close up the collection shop so we can loop through to the end
+
+	var sameIndexAndValue int
+	for idxVal := range collect {
+		if idxVal[0] == idxVal[1] {
+			sameIndexAndValue++
+		}
+	}
+
+	assert.Less(t, sameIndexAndValue, loop, "it looks like atomic didn't work as expected.")
+}
+
+func TestMapTransport(t *testing.T) {
+	var opts = []func(*testing.T){}
+
+	type (
+		testFn          func(*testing.T)
+		testParamsInFn  func(string, string, eiot.Transporter, siot.Transporter) testFn
+		testParamsOutFn func(*testing.T) (string, string, eiot.Transporter, siot.Transporter)
+	)
+
+	runWithOptions := map[string]testParamsInFn{
+		"Send": func(data string, packetData string, etr eiot.Transporter, str siot.Transporter) testFn {
+			return MapTransportTestSend(opts, data, packetData, etr, str)
+		},
+		"Receive": func(data string, packetData string, etr eiot.Transporter, str siot.Transporter) testFn {
+			return MapTransportTestReceive(opts, data, packetData, etr, str)
+		},
+	}
+
+	spec := map[string]testParamsOutFn{
+		"Basic": func(*testing.T) (string, string, eiot.Transporter, siot.Transporter) {
+			data := `This is cool`
+			packetData := `16:40"This is cool"`
+			codec := eiot.Codec{
+				PacketEncoder:  eiop.NewPacketEncoderV2,
+				PacketDecoder:  eiop.NewPacketDecoderV2,
+				PayloadEncoder: eiop.NewPayloadEncoderV2,
+				PayloadDecoder: eiop.NewPayloadDecoderV2,
+			}
+
+			eTransporter := eiot.NewPollingTransport(1000, 10*time.Millisecond)(tmap.SessionID("12345"), codec)
+			sTransporter := tmap.NewMapTransport(siop.NewPacketV2)
+
+			return data, packetData, eTransporter, sTransporter
+		},
+	}
+
+	for name, testParams := range spec {
+		for suffix, run := range runWithOptions {
+			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)))
+		}
 	}
 }
 
-// Test for a MapTransport Set
+func MapTransportTestSend(opts []func(*testing.T), data string, packetData string, etr eiot.Transporter, str siot.Transporter) func(t *testing.T) {
+	sess.GenerateID = func() tmap.SocketID { return tmap.SocketID("ABC123") }
+	return func(t *testing.T) {
+		sid, err := str.Add(etr)
+		assert.NoError(t, err)
+
+		rec := httptest.NewRecorder()
+
+		transportSend := new(sync.WaitGroup)
+		transportSend.Add(1)
+		go func() {
+			defer transportSend.Done()
+			req, err := http.NewRequest("GET", "/", nil) // polling is waiting...
+			assert.NoError(t, err)
+
+			err = etr.Run(rec, req)
+			assert.NoError(t, err)
+		}()
+
+		err = str.Send(sid, data)
+		assert.NoError(t, err)
+		transportSend.Wait()
+
+		have := rec.Body.String()
+		want := packetData
+
+		assert.Equal(t, want, have)
+	}
+}
+
+func MapTransportTestReceive(opts []func(*testing.T), data string, packetData string, etr eiot.Transporter, str siot.Transporter) func(t *testing.T) {
+	sess.GenerateID = func() tmap.SocketID { return tmap.SocketID("ABC123") }
+	return func(t *testing.T) {
+		sid, err := str.Add(etr)
+		assert.NoError(t, err)
+
+		rec := httptest.NewRecorder()
+
+		transportReceive := new(sync.WaitGroup)
+		transportReceive.Add(1)
+		go func() {
+			defer transportReceive.Done()
+			req, err := http.NewRequest("POST", "/", strings.NewReader(packetData))
+			assert.NoError(t, err)
+
+			err = etr.Run(rec, req)
+			assert.NoError(t, err)
+		}()
+		transportReceive.Wait()
+
+		have := <-str.Receive(sid)
+		want := tmap.Socket{
+			Type:      byte(eiop.OpenPacket),
+			Namespace: "/",
+			AckID:     0x0,
+			Data:      &data,
+		}
+
+		assert.Equal(t, want, have)
+	}
+}
 
 type mockTransporter struct {
 	eiot.Transporter
@@ -183,7 +183,7 @@ func (mt mockTransporter) ID() eiot.SessionID {
 }
 
 func (mt mockTransporter) Receive() <-chan eiop.Packet {
-	return nil
+	return nil // © 2022 ǌɵɳᴇѕ
 }
 
 func newMockTransporter(id string) mockTransporter {

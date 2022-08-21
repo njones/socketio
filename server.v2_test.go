@@ -17,96 +17,16 @@ import (
 )
 
 func TestServerV2(t *testing.T) {
-	var opts []testingOption
-
-	type (
-		v2TestFn       func(*testing.T)
-		v2ParamsInFn   func(socketio.Server, int, map[string][][]string, *sync.WaitGroup) v2TestFn
-		v2ParamsOutFn  func(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup)
-		v2TestServerFn func(...testingOption) v2ParamsInFn
-	)
-
+	var opts = []func(*testing.T){runTest("")}
 	var EIOv = 3
 
-	runWithOptions := map[string]v2TestServerFn{
-		".Polling": func(...testingOption) v2ParamsInFn {
-			return func(v2 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) v2TestFn {
-				return func(t *testing.T) {
-					for _, opt := range opts {
-						opt(t)
-					}
-
-					var (
-						server = httptest.NewServer(v2)
-						client = make([]*testClient, count)
-					)
-
-					// send onConnect events (auto onConnect for v2)
-					for i := 0; i < count; i++ {
-						client[i] = &testClient{polling: &v1PollingClient{
-							t:          t,
-							base:       server.URL,
-							client:     server.Client(),
-							buffer:     new(bytes.Buffer),
-							eioVersion: EIOv,
-						}}
-
-						var queryStr []string
-						if q, ok := seq["connect_query"]; ok {
-							queryStr = q[i]
-						}
-						client[i].polling.connect(queryStr)
-					}
-
-					// wait for all onConnection events to complete...
-					syncOn.Wait()
-
-					var x int
-					reqSequence := []string{"send1", "grab1", "send2", "grab2"}
-					for _, reqType := range reqSequence {
-						if request, ok := seq[reqType]; ok && strings.HasPrefix(reqType, "send") {
-							var packetBuf = new(bytes.Buffer)
-
-							for i, packets := range request {
-								x++
-								if len(packets) == 0 {
-									continue
-								}
-
-								syncOn.Add(1)
-								packetBuf.Reset()
-
-								for _, packet := range packets {
-									packetBuf.WriteString(fmt.Sprintf("%d:%s", len(packet), packet))
-								}
-								client[i].polling.send(packetBuf)
-							}
-							continue
-						}
-						if request, ok := seq[reqType]; ok && strings.HasPrefix(reqType, "grab") {
-							for i, want := range request {
-								x++
-								have := client[i].polling.grab()
-								assert.Equal(t, want, have, "[%s] idx: %d", reqType, i)
-							}
-							continue
-						}
-					}
-
-					// wait for all emitted events to complete...
-					syncOn.Wait()
-
-					// check that we hit every "want" that we needed to check...
-					if xq, ok := seq["connect_query"]; ok {
-						x += len(xq)
-					}
-					assert.Equal(t, count*len(seq), x)
-				}
-			}
+	runWithOptions := map[string]testParamsInFn{
+		"polling": func(v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
+			return PollingTestV2(opts, EIOv, v1, count, seq, syncOn)
 		},
 	}
 
-	integration := map[string]v2ParamsOutFn{
+	integration := map[string]testParamsOutFn{
 		"sending to the client":                                                   SendingToTheClientV2,
 		"sending to all clients except sender":                                    SendingToAllClientsExceptTheSenderV2,
 		"sending to all clients in 'game' room except sender":                     SendingToAllClientsInGameRoomExceptSenderV2,
@@ -117,23 +37,98 @@ func TestServerV2(t *testing.T) {
 		"sending to individual socketid (private message)":                        SendingToIndividualSocketIDPrivateMessageV2,
 		"sending with acknowledgement":                                            SendingWithAcknowledgementV2,
 		"sending to all connected clients":                                        SendingToAllConnectedClientsV2,
+
 		// extra
 		"on event":                               OnEventV2,
 		"reject the client":                      RejectTheClientV2,
 		"sending a binary event from the client": SendingBinaryEventFromClientV2,
 	}
 
-	for name, testing := range integration {
-		for suffix, runWithOption := range runWithOptions {
-			t.Run(name+suffix, runWithOption(opts...)(testing(t)))
+	for name, testParams := range integration {
+		for suffix, run := range runWithOptions {
+			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)))
 		}
 	}
 
 }
 
+func PollingTestV2(opts []func(*testing.T), EIOv int, v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
+	return func(t *testing.T) {
+		for _, opt := range opts {
+			opt(t)
+		}
+
+		var (
+			server = httptest.NewServer(v1)
+			client = make([]*testClient, count)
+		)
+
+		// send onConnect events (auto onConnect for v2)
+		for i := 0; i < count; i++ {
+			client[i] = &testClient{polling: &v1PollingClient{
+				t:          t,
+				base:       server.URL,
+				client:     server.Client(),
+				buffer:     new(bytes.Buffer),
+				eioVersion: EIOv,
+			}}
+
+			var queryStr []string
+			if q, ok := seq["connect_query"]; ok {
+				queryStr = q[i]
+			}
+			client[i].polling.connect(queryStr)
+		}
+
+		// wait for all onConnection events to complete...
+		syncOn.Wait()
+
+		var x int
+		reqSequence := []string{"send1", "grab1", "send2", "grab2"}
+		for _, reqType := range reqSequence {
+			if request, ok := seq[reqType]; ok && strings.HasPrefix(reqType, "send") {
+				var packetBuf = new(bytes.Buffer)
+
+				for i, packets := range request {
+					x++
+					if len(packets) == 0 {
+						continue
+					}
+
+					syncOn.Add(1)
+					packetBuf.Reset()
+
+					for _, packet := range packets {
+						packetBuf.WriteString(fmt.Sprintf("%d:%s", len(packet), packet))
+					}
+					client[i].polling.send(packetBuf)
+				}
+				continue
+			}
+			if request, ok := seq[reqType]; ok && strings.HasPrefix(reqType, "grab") {
+				for i, want := range request {
+					x++
+					have := client[i].polling.grab()
+					assert.Equal(t, want, have, "[%s] idx: %d", reqType, i)
+				}
+				continue
+			}
+		}
+
+		// wait for all emitted events to complete...
+		syncOn.Wait()
+
+		// check that we hit every "want" that we needed to check...
+		if xq, ok := seq["connect_query"]; ok {
+			x += len(xq)
+		}
+		assert.Equal(t, count*len(seq), x)
+	}
+}
+
 func SendingToTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2()
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -146,7 +141,7 @@ func SendingToTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]st
 		count = len(want["grab1"])
 
 		str = serialize.String
-		one = serialize.Int(1)
+		one = serialize.Integer(1)
 	)
 
 	checkCount(t, count)
@@ -155,7 +150,7 @@ func SendingToTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]st
 	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
-		socket.Emit("hello", str("can you hear me?"), one, serialize.Int(2), str("abc"))
+		socket.Emit("hello", str("can you hear me?"), one, serialize.Integer(2), str("abc"))
 		return nil
 	})
 
@@ -164,7 +159,7 @@ func SendingToTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]st
 
 func SendingToAllClientsExceptTheSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2()
+		v2   = socketio.NewServerV2(testingQuickPoll)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -498,7 +493,7 @@ func SendingWithAcknowledgementV2(t *testing.T) (socketio.Server, int, map[strin
 		wait.Done()
 
 		err := socket.Emit("question", question, callback.Wrap{
-			Parameters: []serialize.Serializable{serialize.Str, serialize.ISize},
+			Parameters: []serialize.Serializable{serialize.StrParam, serialize.IntParam},
 			Func: func() interface{} {
 				return func(value1 string, value2 int) error {
 					wait.Done()
@@ -591,7 +586,7 @@ func OnEventV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 		socket.Join("room")
 
 		socket.On("chat message", callback.Wrap{
-			Parameters: []serialize.Serializable{serialize.Str},
+			Parameters: []serialize.Serializable{serialize.StrParam},
 			Func: func() interface{} {
 
 				return func(msg string) error {
@@ -643,7 +638,7 @@ func RejectTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]strin
 
 		tf := socket.Request().URL.Query().Get("access")
 		if tf == "true" {
-			socket.Emit("hello", serialize.Int(1))
+			socket.Emit("hello", serialize.Integer(1))
 			return nil
 		}
 

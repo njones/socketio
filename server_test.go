@@ -10,15 +10,21 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/njones/socketio"
 	eio "github.com/njones/socketio/engineio"
 	eiot "github.com/njones/socketio/engineio/transport"
 	"github.com/stretchr/testify/assert"
 )
 
-type testingOption func(*testing.T)
+type (
+	testFn          func(*testing.T)
+	testParamsInFn  func(socketio.Server, int, map[string][][]string, *sync.WaitGroup) testFn
+	testParamsOutFn func(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup)
+)
 
 var (
 	testingName = strings.NewReplacer(" ", "_")
@@ -39,6 +45,10 @@ func runTest(testNames ...string) func(*testing.T) {
 		suffix := strings.Split(have, ".")[1]
 
 		for _, testName := range testNames {
+			if testName == "" || testName == "*" {
+				return
+			}
+
 			want := testingName.Replace(testName)
 			if !strings.Contains(want, ".") {
 				want += "." + suffix
@@ -77,7 +87,7 @@ func (fn testBinaryEventFunc) Callback(v ...interface{}) error {
 	return nil
 }
 
-var testingQuickPoll = eio.WithTransport("polling", eiot.NewPollingTransport(1000, 10*time.Millisecond))
+var testingQuickPoll = eio.WithTransport("polling", eiot.NewPollingTransport(1000, 5*time.Millisecond))
 
 type pollingClient interface {
 	connect(...[]string)
