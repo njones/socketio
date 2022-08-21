@@ -37,7 +37,7 @@ func (x packetDataString) Len() int {
 	if x.x == nil {
 		return 0
 	}
-	return len(*x.x)
+	return len(*x.x) + 2 // the +2 is for "" quote marks
 }
 
 func (x *packetDataString) Read(p []byte) (n int, err error) {
