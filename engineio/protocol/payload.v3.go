@@ -17,7 +17,8 @@ type PayloadV3 []PacketV3
 type PayloadDecoderV3 struct {
 	*PayloadDecoderV2
 
-	IsXHR2 bool
+	hasBinarySupport bool
+	hasXHR2Support   bool
 }
 
 var NewPayloadDecoderV3 _payloadDecoderV3 = func(r io.Reader) *PayloadDecoderV3 {
@@ -29,7 +30,7 @@ func (dec *PayloadDecoderV3) Decode(payload *PayloadV3) error {
 		payload = &PayloadV3{}
 	}
 
-	if dec.IsXHR2 {
+	if dec.hasXHR2Support {
 		first := dec.read.Peek(1)
 		if first[0] == 0x00 || first[0] == 0x01 {
 			return dec.read.decodeXHR2(payload)
@@ -45,7 +46,8 @@ func (dec *PayloadDecoderV3) Decode(payload *PayloadV3) error {
 		b := dec.read.Peek(1)
 		if dec.read.IsNotErr() && b[0] == 'b' {
 			isBinary = true
-			dec.read.CopyN(io.Discard, 1).OnErr(ErrPayloadDecode) // consume and throw away the 'b' byte
+			_, err := io.CopyN(io.Discard, r, 1) // consume and throw away the 'b' byte
+			dec.read.SetErr(err)
 			r = io.MultiReader(io.LimitReader(r, packetTypeLength), base64.NewDecoder(base64.StdEncoding, r))
 		}
 
@@ -62,11 +64,12 @@ func (dec *PayloadDecoderV3) Decode(payload *PayloadV3) error {
 type PayloadEncoderV3 struct {
 	*PayloadEncoderV2
 
-	IsXHR2 bool
+	hasBinarySupport bool
+	hasXHR2Support   bool
 }
 
 var NewPayloadEncoderV3 _payloadEncoderV3 = func(w io.Writer) *PayloadEncoderV3 {
-	return &PayloadEncoderV3{PayloadEncoderV2: &PayloadEncoderV2{write: rw.NewWriter(w)}}
+	return &PayloadEncoderV3{PayloadEncoderV2: &PayloadEncoderV2{write: &writer{Writer: rw.NewWriter(w)}}}
 }
 
 func (enc *PayloadEncoderV3) Encode(payload PayloadV3) error {
@@ -79,7 +82,21 @@ func (enc *PayloadEncoderV3) Encode(payload PayloadV3) error {
 }
 
 func (enc *PayloadEncoderV3) encode(packet PacketV3) error {
-	enc.write.String(fmt.Sprintf("%d:", packet.Len()))
+
+	var binaryB string
+	var lenBuf int
+	if enc.hasBinarySupport && enc.hasXHR2Support {
+		return enc.write.encodeXHR2(packet)
+	}
+
+	if packet.IsBinary {
+		enc.write.SetEncoder(_packetBase64encoder(base64.NewEncoder))
+		binaryB = "b"
+		packetLen := packet.Len() - 1                                     // -1 is the MessageType packet length
+		lenBuf = base64.StdEncoding.EncodedLen(packetLen) - packetLen + 1 // +1 is the "b"
+	}
+
+	enc.write.String(fmt.Sprintf("%d:%s", packet.Len()+lenBuf, binaryB))
 	if err := NewPacketEncoderV3(enc.write).Encode(packet); err != nil {
 		return ErrPayloadEncode.F("v3", err)
 	}

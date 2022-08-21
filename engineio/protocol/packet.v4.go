@@ -36,7 +36,7 @@ func (dec *PacketDecoderV4) Decode(packet *PacketV4) error {
 	switch packet.T {
 	case BinaryPacket:
 		var data = new(bytes.Buffer)
-		dec.read.Base64(base64.StdEncoding).Copy(data).OnErrF(ErrPacketDecode, "v4", dec.read.Err())
+		dec.read.SetDecoder(_packetBase64Decoder(base64.NewDecoder)).Decode(data).OnErrF(ErrPacketDecode, "v4", dec.read.Err())
 		packet.IsBinary = true
 		packet.D = (io.Reader)(data)
 		return dec.read.Err()
@@ -63,9 +63,9 @@ func (enc *PacketEncoderV4) Encode(packet PacketV4) (err error) {
 		enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v4", enc.write.Err())
 		switch data := packet.D.(type) {
 		case []byte:
-			enc.write.Base64(base64.StdEncoding).Bytes(data).OnErrF(ErrPacketEncode, "v4", enc.write.Err())
+			enc.write.UseEncoder(_packetBase64encoder(base64.NewEncoder)).Encode(data).OnErrF(ErrPacketEncode, "v4", enc.write.Err())
 		case io.Reader:
-			enc.write.Base64(base64.StdEncoding).Copy(data).OnErrF(ErrPacketEncode, "v4", enc.write.Err())
+			enc.write.UseEncoder(_packetBase64encoder(base64.NewEncoder)).Encode(data).OnErrF(ErrPacketEncode, "v4", enc.write.Err())
 		default:
 			return fmt.Errorf("bad packet dinary encode type: %T", data)
 		}

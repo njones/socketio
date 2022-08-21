@@ -17,7 +17,7 @@ func (pac _packetEncoderV2) To(w io.Writer) PacketWriter   { return _packetWrite
 func (pac _packetReaderV2) ReadPacket(packet PacketRef) (err error) {
 	var v = PacketV2{Packet: *packet.PacketRef()}
 	err = pac(&v)
-	*packet.PacketRef() = v.Packet // add even if err becuase when using Decode this is what happens
+	*packet.PacketRef() = v.Packet // add even if err because when using Decode this is what happens
 	return err
 }
 func (pac _packetWriterV2) WritePacket(packet PacketVal) error {

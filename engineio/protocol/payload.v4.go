@@ -43,7 +43,7 @@ type PayloadEncoderV4 struct{ *PayloadEncoderV3 }
 var NewPayloadEncoderV4 _payloadEncoderV4 = func(w io.Writer) *PayloadEncoderV4 {
 	return &PayloadEncoderV4{
 		PayloadEncoderV3: &PayloadEncoderV3{
-			PayloadEncoderV2: &PayloadEncoderV2{write: rw.NewWriter(w)},
+			PayloadEncoderV2: &PayloadEncoderV2{write: &writer{Writer: rw.NewWriter(w)}},
 		},
 	}
 }

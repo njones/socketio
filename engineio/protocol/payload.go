@@ -26,3 +26,10 @@ type reader struct {
 	*rw.Reader
 	err error
 }
+
+type writer struct {
+	*rw.Writer
+	err error
+}
+
+func (w writer) PropagateWriter() *rw.Writer { return w.Writer }

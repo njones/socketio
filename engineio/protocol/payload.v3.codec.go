@@ -28,7 +28,15 @@ type _payloadWriterV3 func(pay PayloadV3) (err error)
 func (pay _payloadEncoderV3) SetXHR2(isXHR2 bool) _payloadEncoderV3 {
 	return func(w io.Writer) *PayloadEncoderV3 {
 		enc := pay(w)
-		enc.IsXHR2 = isXHR2
+		enc.hasXHR2Support = isXHR2
+		return enc
+	}
+}
+
+func (pay _payloadEncoderV3) SetBinary(isBinary bool) _payloadEncoderV3 {
+	return func(w io.Writer) *PayloadEncoderV3 {
+		enc := pay(w)
+		enc.hasBinarySupport = isBinary
 		return enc
 	}
 }
@@ -36,7 +44,15 @@ func (pay _payloadEncoderV3) SetXHR2(isXHR2 bool) _payloadEncoderV3 {
 func (pay _payloadDecoderV3) SetXHR2(isXHR2 bool) _payloadDecoderV3 {
 	return func(r io.Reader) *PayloadDecoderV3 {
 		dec := pay(r)
-		dec.IsXHR2 = isXHR2
+		dec.hasXHR2Support = isXHR2
+		return dec
+	}
+}
+
+func (pay _payloadDecoderV3) SetBinary(isBinary bool) _payloadDecoderV3 {
+	return func(r io.Reader) *PayloadDecoderV3 {
+		dec := pay(r)
+		dec.hasBinarySupport = isBinary
 		return dec
 	}
 }
