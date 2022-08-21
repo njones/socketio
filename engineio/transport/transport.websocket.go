@@ -99,7 +99,7 @@ func (t *WebsocketTransport) probe(w http.ResponseWriter, r *http.Request) error
 
 	wsw.Close() // done with the connection, must always close.
 
-	// Reveive the Pong
+	// Receive the Pong
 	_, wsr, err := t.conn.Reader(ctx)
 	if err != nil {
 		return err

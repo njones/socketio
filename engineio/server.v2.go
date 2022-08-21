@@ -11,7 +11,7 @@ package engineio
 //
 
 import (
-	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -23,7 +23,7 @@ import (
 
 const Version2 EIOVersionStr = "2"
 
-func init() { registery[Version2.Int()] = NewServerV2 }
+func init() { registry[Version2.Int()] = NewServerV2 }
 
 type serverV2 struct {
 	path *string
@@ -32,10 +32,13 @@ type serverV2 struct {
 	pingTimeout       time.Duration
 	upgradeTimeout    time.Duration
 	maxHttpBufferSize int
-	cookie            struct {
+
+	// https://socket.io/how-to/deal-with-cookies
+	cookie struct {
 		name     string
 		path     string
 		httpOnly bool
+		sameSite http.SameSite
 	}
 
 	transportChanBuf int
@@ -99,12 +102,13 @@ func (v2 *serverV2) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot
 		return nil, ErrURIPath
 	}
 
-	sessionID := sessionIDFrom(r)
-	if sessionID == "" {
-		return v2.initHandshake(w, r)
+	eioVersion := eioVersionFrom(r)
+	v, ok := v2.servers[eioVersion]
+	if !ok {
+		return nil, fmt.Errorf("bad server")
 	}
 
-	transport, err := v2.sessions.Get(sessionID)
+	transport, err := v.serveTransport(w, r)
 	if err != nil {
 		return nil, err
 	}
@@ -122,27 +126,22 @@ func (v2 *serverV2) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if v2.cookie.name != "" {
-		cookie := http.Cookie{
-			Name:     v2.cookie.name,
-			Path:     v2.cookie.path,
-			HttpOnly: v2.cookie.httpOnly,
-		}
-		r.AddCookie(&cookie)
-	}
-
 	eioVersion := eioVersionFrom(r)
 	if v, ok := v2.servers[eioVersion]; ok {
-		if err := v.serveHTTP(w, r); err != nil {
+		if transport, err := v.serveTransport(w, r); err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		} else if err = transport.Run(w, r); err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			// return ErrTransportRun.F(err)
 		}
+
 		return
 	}
 
 	http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 }
 
-func (v2 *serverV2) serveHTTP(w http.ResponseWriter, r *http.Request) error {
+func (v2 *serverV2) serveTransport(w http.ResponseWriter, r *http.Request) (eiot.Transporter, error) {
 	if origin := r.Header.Get("Origin"); origin != "" {
 		// Automatically add a CORS header
 		if strings.EqualFold(origin, r.URL.Host) {
@@ -150,38 +149,30 @@ func (v2 *serverV2) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if strings.ToUpper(r.Method) == "OPTIONS" {
-		return nil
+		return nil, nil
 	}
 
 	sessionID := sessionIDFrom(r)
 
 	if sessionID == "" {
-		_, err := v2.initHandshake(w, r)
-		if errors.Is(err, EndOfHandshake{}) {
-			return nil
-		}
-		return err
+		return v2.initHandshake(w, r)
 	}
 
 	toTransport := transportNameFrom(r)
 
 	transport, err := v2.sessions.Get(sessionID)
 	if err != nil {
-		return err
+		return transport, err
 	}
 
 	if v2.allowUpgrades {
-		if tport, ok := v2.doUpgrade(transport, toTransport); ok {
+		if tPort, ok := v2.doUpgrade(transport, toTransport); ok {
 			transport.Shutdown() // the previous transport should stop, now overwrite it...
-			transport = tport    // no shadowing, we want to replace the transport...
+			transport = tPort    // no shadowing, we want to replace the transport...
 		}
 	}
 
-	if err = transport.Run(w, r); err != nil {
-		return ErrTransportRun.F(err)
-	}
-
-	return err
+	return transport, err
 }
 
 func (v2 *serverV2) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.Transporter, error) {
@@ -212,6 +203,17 @@ func (v2 *serverV2) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 
 	if err := v2.codec.PayloadEncoder.To(w).WritePayload(eiop.Payload(packets)); err != nil {
 		return nil, ErrPayloadEncode.F(err)
+	}
+
+	if v2.cookie.name != "" {
+		cookie := http.Cookie{
+			Name:     v2.cookie.name,
+			Value:    sessionID.String(),
+			Path:     v2.cookie.path,
+			HttpOnly: v2.cookie.httpOnly,
+			SameSite: v2.cookie.sameSite,
+		}
+		r.AddCookie(&cookie)
 	}
 
 	// End Of Handshake

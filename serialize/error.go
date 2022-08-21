@@ -5,6 +5,5 @@ import (
 )
 
 const (
-	ErrSerializeBinary   errs.String = "can not serialize the object, instead %s"
-	ErrUnserializeBinary errs.String = "can not unserialize the object, instead %s"
+	ErrSerializableBinary errs.String = "can not serialize the object, use Read instead"
 )

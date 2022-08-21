@@ -19,7 +19,7 @@ func (v EIOVersionStr) Int() EIOVersionInt { i, _ := strconv.Atoi(string(v)); re
 
 type server interface {
 	Server
-	serveHTTP(http.ResponseWriter, *http.Request) error
+	serveTransport(http.ResponseWriter, *http.Request) (eiot.Transporter, error)
 }
 
 type Server = interface {
@@ -31,4 +31,4 @@ type EIOServer interface {
 	ServeTransport(http.ResponseWriter, *http.Request) (eiot.Transporter, error)
 }
 
-func NewServer(opts ...Option) Server { return registery.latest(opts...) }
+func NewServer(opts ...Option) Server { return registry.latest(opts...) }

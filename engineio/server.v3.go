@@ -21,7 +21,7 @@ import (
 
 const Version3 EIOVersionStr = "3"
 
-func init() { registery[Version3.Int()] = NewServerV3 }
+func init() { registry[Version3.Int()] = NewServerV3 }
 
 type serverV3 struct {
 	*serverV2
@@ -188,6 +188,17 @@ func (v3 *serverV3) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 
 	if err := v3.codec.PayloadEncoder.To(w).WritePayload(eiop.Payload(packets)); err != nil {
 		return nil, ErrPayloadEncode.F(err)
+	}
+
+	if v3.cookie.name != "" {
+		cookie := http.Cookie{
+			Name:     v3.cookie.name,
+			Value:    sessionID.String(),
+			Path:     v3.cookie.path,
+			HttpOnly: v3.cookie.httpOnly,
+			SameSite: v3.cookie.sameSite,
+		}
+		r.AddCookie(&cookie)
 	}
 
 	// End Of Handshake
