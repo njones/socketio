@@ -11,13 +11,14 @@ package engineio
 //
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
-	sess "github.com/njones/socketio/engineio/session"
+	eios "github.com/njones/socketio/engineio/session"
 	eiot "github.com/njones/socketio/engineio/transport"
 )
 
@@ -43,8 +44,8 @@ type serverV2 struct {
 
 	transportChanBuf int
 
-	initialPacket func() eiop.Packet
-	generateID    func() SessionID
+	initialPackets func(eiot.Transporter, *http.Request) []eiop.Packet
+	generateID     func() SessionID
 
 	codec eiot.Codec
 
@@ -67,7 +68,7 @@ func (v2 *serverV2) new(opts ...Option) *serverV2 {
 
 	v2.eto = append(v2.eto, eiot.WithPingTimeout(v2.pingTimeout))
 
-	v2.generateID = sess.GenerateID
+	v2.generateID = eios.GenerateID
 	v2.codec = eiot.Codec{
 		PacketEncoder:  eiop.NewPacketEncoderV2,
 		PacketDecoder:  eiop.NewPacketDecoderV2,
@@ -188,11 +189,6 @@ func (v2 *serverV2) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 		},
 	}
 
-	packets := []eiop.Packet{handshakePacket}
-	if v2.initialPacket != nil {
-		packets = append(packets, v2.initialPacket())
-	}
-
 	transportFunc, ok := v2.transports[transportName]
 	if !ok {
 		return nil, ErrNoTransport
@@ -200,6 +196,11 @@ func (v2 *serverV2) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 
 	transport := transportFunc(sessionID, v2.codec)
 	v2.sessions.Set(transport)
+
+	packets := []eiop.Packet{handshakePacket}
+	if v2.initialPackets != nil {
+		packets = append(packets, v2.initialPackets(transport, r)...)
+	}
 
 	if err := v2.codec.PayloadEncoder.To(w).WritePayload(eiop.Payload(packets)); err != nil {
 		return nil, ErrPayloadEncode.F(err)

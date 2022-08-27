@@ -4,37 +4,37 @@ import (
 	"errors"
 	"fmt"
 
-	errs "github.com/njones/socketio/internal/errors"
+	erro "github.com/njones/socketio/internal/errors"
 )
 
 // All of the errors that can happen while reading or writing socket.io packets
 const (
 	ErrOnReadSoBuffer errsPacket = "error reading packet type %s, save for buffer"
 
-	ErrBadRead    errs.String = "bad read of bytes: %w"
-	ErrShortRead  errs.String = "short read"
-	ErrShortWrite errs.String = "short write"
+	ErrBadRead    erro.String = "bad read of bytes: %w"
+	ErrShortRead  erro.String = "short read"
+	ErrShortWrite erro.String = "short write"
 
-	ErrEmptyDataArray          errs.String = "empty data array"
-	ErrEmptyDataObject         errs.String = "empty data object"
-	ErrNoAckID                 errs.String = "no ackID found"
-	ErrPacketDataNotWritable   errs.String = "no data io.writer found"
-	ErrUnexpectedAttachmentEnd errs.String = "unexpected attachment end"
+	ErrEmptyDataArray          erro.String = "empty data array"
+	ErrEmptyDataObject         erro.String = "empty data object"
+	ErrNoAckID                 erro.String = "no ackID found"
+	ErrPacketDataNotWritable   erro.String = "no data io.writer found"
+	ErrUnexpectedAttachmentEnd erro.String = "unexpected attachment end"
 
-	ErrUnexpectedJSONEnd  errs.String = "unexpected end of JSON input"
-	ErrBadMarshal         errs.String = "data marshal: %w"
-	ErrBadUnmarshal       errs.String = "data unmarshal: %w"
-	ErrBadBinaryMarshal   errs.String = "binary data marshal: %w"
-	ErrBadBinaryUnmarshal errs.String = "binary data unmarshal: %w"
-	ErrBadParse           errs.String = "%s int parse: %w"
+	ErrUnexpectedJSONEnd  erro.String = "unexpected end of JSON input"
+	ErrBadMarshal         erro.String = "data marshal: %w"
+	ErrBadUnmarshal       erro.String = "data unmarshal: %w"
+	ErrBadBinaryMarshal   erro.String = "binary data marshal: %w"
+	ErrBadBinaryUnmarshal erro.String = "binary data unmarshal: %w"
+	ErrBadParse           erro.String = "%s int parse: %w"
 
-	ErrBinaryDataUnsupported errs.String = "binary data for this version is unsupported"
-	ErrInvalidPacketType     errs.String = "the data packet type %T does not exist"
+	ErrBinaryDataUnsupported erro.String = "binary data for this version is unsupported"
+	ErrInvalidPacketType     erro.String = "the data packet type %T does not exist"
 
-	ErrBadInitialFieldUnmarshal errs.String = "bad initial unmarshal of packet field data: %w"
-	ErrBadFieldBase64Decode     errs.String = "bad base64 decode of field string for msgpack: %w"
-	ErrBadFieldMsgPackDecode    errs.String = "bad msgpack decode of field string for msgpack: %w"
-	ErrBadFieldMsgPackEncode    errs.String = "bad msgpack encode of field string for msgpack: %w"
+	ErrBadInitialFieldUnmarshal erro.String = "bad initial unmarshal of packet field data: %w"
+	ErrBadFieldBase64Decode     erro.String = "bad base64 decode of field string for msgpack: %w"
+	ErrBadFieldMsgPackDecode    erro.String = "bad msgpack decode of field string for msgpack: %w"
+	ErrBadFieldMsgPackEncode    erro.String = "bad msgpack encode of field string for msgpack: %w"
 )
 
 // errsPacket is an error type that can send back PacketError errors.

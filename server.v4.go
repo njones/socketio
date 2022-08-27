@@ -3,7 +3,7 @@ package socketio
 import (
 	"net/http"
 
-	tmap "github.com/njones/socketio/adaptor/transport/map"
+	nmem "github.com/njones/socketio/adaptor/transport/memory"
 	eio "github.com/njones/socketio/engineio"
 	siop "github.com/njones/socketio/protocol"
 )
@@ -32,7 +32,7 @@ func (v4 *ServerV4) new(opts ...Option) Server {
 
 	v1.run = runV4(v4)
 	v1.eio = eio.NewServerV5(eio.WithPath(*v1.path)).(eio.EIOServer)
-	v1.transport = tmap.NewMapTransport(siop.NewPacketV5)
+	v1.transport = nmem.NewInMemoryTransport(siop.NewPacketV5)
 	v1.protectedEventName = v4ProtectedEventName
 	v1.doConnectPacket = doConnectPacketV4(v4)
 

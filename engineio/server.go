@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"strconv"
 
-	sess "github.com/njones/socketio/engineio/session"
+	eios "github.com/njones/socketio/engineio/session"
 	eiot "github.com/njones/socketio/engineio/transport"
 )
 
 type (
-	SessionID = sess.ID
+	SessionID = eios.ID
 
 	EIOVersionStr string
 	EIOVersionInt int

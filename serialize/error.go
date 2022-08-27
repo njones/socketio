@@ -1,9 +1,9 @@
 package serialize
 
 import (
-	errs "github.com/njones/socketio/internal/errors"
+	erro "github.com/njones/socketio/internal/errors"
 )
 
 const (
-	ErrSerializableBinary errs.String = "can not serialize the object, use Read instead"
+	ErrSerializableBinary erro.String = "can not serialize the object, use Read instead"
 )

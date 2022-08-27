@@ -2,68 +2,95 @@ package socketio
 
 import (
 	"fmt"
+	"net/http"
 
+	eiop "github.com/njones/socketio/engineio/protocol"
+	eiot "github.com/njones/socketio/engineio/transport"
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
 )
 
+func autoConnect(v1 *ServerV1, newPacket siop.NewPacket) func(transport eiot.Transporter, r *http.Request) []eiop.Packet {
+	return func(transport eiot.Transporter, r *http.Request) []eiop.Packet {
+		socketID, err := v1.tr().Add(transport)
+		if err != nil {
+			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+			return nil
+		}
+
+		socket := siot.Socket{
+			Type:      siop.ConnectPacket.Byte(),
+			Namespace: "/",
+		}
+
+		if err := v1.doConnectPacket(socketID, socket, sioRequest(r)); err != nil {
+			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+			return nil
+		}
+
+		sioPacket := newPacket().WithType(siop.ConnectPacket.Byte())
+		eioPacket := eiop.Packet{T: eiop.MessagePacket, D: sioPacket}
+
+		return []eiop.Packet{eioPacket}
+	}
+}
+
 // runV1 are the callbacks that are used for version 1 of the server based on the
 // receive of the transport and the packet type. This can be different for the
 // different server versions.
-func runV1(v1 *ServerV1) func(*Request, SocketID) error {
-	return func(r *Request, socketID SocketID) error {
-		for socket := range v1.transport.Receive(socketID) {
-			doV1(v1, r, socketID, socket)
+func runV1(v1 *ServerV1) func(SocketID, *Request) error {
+	return func(socketID SocketID, req *Request) error {
+		for socket := range v1.tr().Receive(socketID) {
+			doV1(v1, socketID, socket, req)
 		}
 		return nil
 	}
 }
 
-func doV1(v1 *ServerV1, r *Request, socketID SocketID, socket siot.Socket) {
+func doV1(v1 *ServerV1, socketID SocketID, socket siot.Socket, req *Request) {
 	switch socket.Type {
 	case siop.ConnectPacket.Byte():
-		if err := v1.doConnectPacket(r, socketID, socket); err != nil {
-			v1.transport.Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+		if err := v1.doConnectPacket(socketID, socket, req); err != nil {
+			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
 		}
 	case siop.DisconnectPacket.Byte():
-		if err := v1.doDisconnectPacket(r, socketID, socket); err != nil {
-			v1.transport.Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+		if err := v1.doDisconnectPacket(socketID, socket, req); err != nil {
+			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
 		}
 	case siop.EventPacket.Byte():
 		if err := v1.doEventPacket(socketID, socket); err != nil {
-			v1.transport.Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
 		}
 	case siop.AckPacket.Byte():
 		if err := v1.doAckPacket(socketID, socket); err != nil {
-			v1.transport.Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
 		}
 	default:
 		err := ErrInvalidPacketType.F("v1", socket)
-		v1.transport.Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+		v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
 	}
 }
 
 // doConnectPacket the function
-func doConnectPacket(v1 *ServerV1) func(*Request, SocketID, siot.Socket) error {
-	return func(req *Request, socketID SocketID, socket siot.Socket) (err error) {
-		v1.transport.Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))
+func doConnectPacket(v1 *ServerV1) func(SocketID, siot.Socket, *Request) error {
+	return func(socketID SocketID, socket siot.Socket, req *Request) (err error) {
+		v1.tr().Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))
 
 		v1.setPrefix()
 		v1.setSocketID(socketID)
 		v1.setNsp(socket.Namespace)
 
-		socketV1 := &SocketV1{inSocketV1: v1.inSocketV1, req: req, Connected: true}
 		if fn, ok := v1.onConnect[socket.Namespace]; ok {
-			return fn(socketV1)
+			return fn(&SocketV1{inSocketV1: v1.inSocketV1, req: req, Connected: true})
 		}
 		return ErrBadOnConnectSocket
 	}
 }
 
-func doDisconnectPacket(v1 *ServerV1) func(*Request, SocketID, siot.Socket) error {
-	return func(req *Request, socketID siot.SocketID, socket siot.Socket) (err error) {
+func doDisconnectPacket(v1 *ServerV1) func(SocketID, siot.Socket, *Request) error {
+	return func(socketID SocketID, socket siot.Socket, req *Request) (err error) {
 		if fn, ok := v1.events[socket.Namespace][OnDisconnectEvent][socketID]; ok {
-			v1.transport.Leave(socket.Namespace, socketID, socketIDPrefix+socketID.String())
+			v1.tr().Leave(socket.Namespace, socketID, socketIDPrefix+socketID.String())
 			return fn.Callback("client namespace disconnect")
 		}
 		return ErrBadOnDisconnectSocket

@@ -1,16 +1,16 @@
 package engineio
 
 import (
-	errs "github.com/njones/socketio/internal/errors"
+	erro "github.com/njones/socketio/internal/errors"
 )
 
 const (
-	ErrNoTransport        errs.String = "transport unknown"
-	ErrNoSessionID        errs.String = "session id unknown"
-	ErrBadHandshakeMethod errs.String = "bad handshake method"
-	ErrURIPath            errs.String = "bad URI path"
-	ErrTransportRun       errs.String = "bad transport run: %w"
-	ErrPayloadEncode      errs.String = "bad payload encode: %w"
+	ErrNoTransport        erro.String = "transport unknown"
+	ErrNoSessionID        erro.String = "session id unknown"
+	ErrBadHandshakeMethod erro.String = "bad handshake method"
+	ErrURIPath            erro.String = "bad URI path"
+	ErrTransportRun       erro.String = "bad transport run: %w"
+	ErrPayloadEncode      erro.String = "bad payload encode: %w"
 )
 
 type EndOfHandshake struct{ SessionID string }

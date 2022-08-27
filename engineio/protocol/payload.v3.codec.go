@@ -86,7 +86,7 @@ func (pay _payloadWriterV3) WritePayload(payload PayloadVal) error {
 			v.D = binaryData.D
 			isBinary = true
 		}
-		pay3[i] = PacketV3{Packet: v, IsBinary: isBinary}
+		pay3[i] = PacketV3{PacketV2{Packet: v}, isBinary}
 	}
 	return pay(pay3)
 }

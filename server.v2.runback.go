@@ -5,17 +5,16 @@ import (
 	siot "github.com/njones/socketio/transport"
 )
 
-func doConnectPacketV2(v2 *ServerV2) func(*Request, SocketID, siot.Socket) error {
-	return func(req *Request, socketID SocketID, socket siot.Socket) (err error) {
+func doConnectPacketV2(v2 *ServerV2) func(SocketID, siot.Socket, *Request) error {
+	return func(socketID SocketID, socket siot.Socket, req *Request) (err error) {
 		v2.tr().Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))
 
 		v2.setPrefix()
 		v2.setSocketID(socketID)
 		v2.setNsp(socket.Namespace)
 
-		socketV2 := &SocketV2{inSocketV2: v2.inSocketV2, req: req}
 		if fn, ok := v2.onConnect[socket.Namespace]; ok {
-			return fn(socketV2)
+			return fn(&SocketV2{inSocketV2: v2.inSocketV2, req: req})
 		}
 		return ErrBadOnConnectSocket
 	}
@@ -49,21 +48,22 @@ func doBinaryEventPacket(v2 *ServerV2) func(SocketID, siot.Socket) error {
 	}
 }
 
-func runV2(v2 *ServerV2) func(r *Request, socketID SocketID) error {
-	return func(r *Request, socketID SocketID) error {
+func runV2(v2 *ServerV2) func(SocketID, *Request) error {
+	return func(socketID SocketID, req *Request) error {
 		for socket := range v2.tr().Receive(socketID) {
-			doV2(v2, r, socketID, socket)
+			doV2(v2, socketID, socket, req)
 		}
 		return nil
 	}
 }
 
-func doV2(v2 *ServerV2, r *Request, socketID SocketID, socket siot.Socket) {
+func doV2(v2 *ServerV2, socketID SocketID, socket siot.Socket, req *Request) {
 	switch socket.Type {
 	case siop.BinaryEventPacket.Byte():
 		if err := v2.doBinaryEventPacket(socketID, socket); err != nil {
 			v2.tr().Send(socketID, serviceError(err), siop.WithType(byte(siop.ErrorPacket)))
 		}
+		return
 	}
-	doV1(v2.prev, r, socketID, socket)
+	doV1(v2.prev, socketID, socket, req)
 }

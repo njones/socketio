@@ -27,12 +27,12 @@ func (pac _packetDecoderV3) From(r io.Reader) PacketReader { return _packetReade
 func (pac _packetEncoderV3) To(w io.Writer) PacketWriter   { return _packetWriterV3(pac(w).Encode) }
 func (pac _packetReaderV3) ReadPacket(packet PacketRef) (err error) {
 	data := packet.PacketRef()
-	var v = PacketV3{Packet: *data}
+	var v = PacketV3{PacketV2{Packet: *data}, false}
 	_, v.IsBinary = data.D.(isBinaryPacket)
 	err = pac(&v)
 	*packet.PacketRef() = v.Packet
 	return err
 }
 func (pac _packetWriterV3) WritePacket(packet PacketVal) error {
-	return pac(PacketV3{Packet: packet.PacketVal()})
+	return pac(PacketV3{PacketV2{Packet: packet.PacketVal()}, false})
 }

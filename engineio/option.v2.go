@@ -1,10 +1,11 @@
 package engineio
 
 import (
+	"net/http"
 	"sync"
 	"time"
 
-	"github.com/njones/socketio/engineio/session"
+	eiop "github.com/njones/socketio/engineio/protocol"
 	eiot "github.com/njones/socketio/engineio/transport"
 )
 
@@ -84,9 +85,22 @@ func WithTransport(name eiot.Name, tr func(SessionID, eiot.Codec) eiot.Transport
 		switch v := svr.(type) {
 		case *serverV2:
 			clearTransports.Do(func() {
-				v.transports = make(map[eiot.Name]func(session.ID, eiot.Codec) eiot.Transporter)
+				v.transports = make(map[eiot.Name]func(SessionID, eiot.Codec) eiot.Transporter)
 			})
 			v.transports[name] = tr
+		case interface{ prev() Server }:
+			svr = v.prev()
+			goto ServerCheck
+		}
+	}
+}
+
+func WithInitialPackets(fn func(eiot.Transporter, *http.Request) []eiop.Packet) Option {
+	return func(svr Server) {
+	ServerCheck: // makes things an O(2^n) check...
+		switch v := svr.(type) {
+		case *serverV2:
+			v.initialPackets = fn
 		case interface{ prev() Server }:
 			svr = v.prev()
 			goto ServerCheck

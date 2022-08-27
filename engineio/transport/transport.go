@@ -5,10 +5,10 @@ import (
 	"time"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
-	sess "github.com/njones/socketio/engineio/session"
+	eios "github.com/njones/socketio/engineio/session"
 )
 
-type SessionID = sess.ID
+type SessionID = eios.ID
 
 type Name string
 
@@ -54,23 +54,5 @@ func (t *Transport) Transport() *Transport       { return t }
 func (t *Transport) Shutdown() {
 	if t.shutdown != nil {
 		t.shutdown()
-	}
-}
-
-func WithPingTimeout(dur time.Duration) Option {
-	return func(t Transporter) {
-		switch v := t.(type) {
-		case interface{ Transport() *Transport }:
-			v.Transport().pingTimeout = dur
-		}
-	}
-}
-
-func WithPingInterval(dur time.Duration) Option {
-	return func(t Transporter) {
-		switch v := t.(type) {
-		case interface{ Transport() *Transport }:
-			v.Transport().pingInterval = dur
-		}
 	}
 }

@@ -3,12 +3,10 @@ package socketio
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
-	tmap "github.com/njones/socketio/adaptor/transport/map"
+	nmem "github.com/njones/socketio/adaptor/transport/memory"
 	eio "github.com/njones/socketio/engineio"
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
@@ -24,17 +22,15 @@ import (
 type ServerV1 struct {
 	inSocketV1
 
-	run                func(req *Request, socketID SocketID) error
-	doConnectPacket    func(req *Request, socketID SocketID, socket siot.Socket) error
-	doDisconnectPacket func(req *Request, socketID SocketID, socket siot.Socket) error
+	run                func(socketID SocketID, req *Request) error
+	doConnectPacket    func(socketID SocketID, socket siot.Socket, req *Request) error
+	doDisconnectPacket func(socketID SocketID, socket siot.Socket, req *Request) error
 	doEventPacket      func(socketID SocketID, socket siot.Socket) error
 	doAckPacket        func(socketID SocketID, socket siot.Socket) error
-	doAutoReconnect    func(string) func(http.ResponseWriter, *http.Request)
-
-	ctx context.Context
 
 	path *string
 
+	ctx context.Context
 	eio eio.EIOServer
 
 	transport siot.Transporter
@@ -57,28 +53,18 @@ func (v1 *ServerV1) new(opts ...Option) Server {
 	v1.doDisconnectPacket = doDisconnectPacket(v1)
 	v1.doEventPacket = doEventPacket(v1)
 	v1.doAckPacket = doAckPacket(v1)
-	v1.doAutoReconnect = func(sid string) func(http.ResponseWriter, *http.Request) {
-		return func(w http.ResponseWriter, r *http.Request) {
-			query := r.URL.Query() // keep EIO and Transport...
-			query.Del("sid")
-			query.Del("t")
-
-			url := fmt.Sprintf("%s?&sid=%s&t=%d&%s", *v1.path, sid, time.Now().UnixNano(), query.Encode())
-			req, _ := http.NewRequest(http.MethodPost, url, strings.NewReader("2:40"))
-			v1.ServeHTTP(w, req.WithContext(r.Context()))
-			fmt.Fprintf(w, "%s40", "2:")
-		}
-	}
 
 	v1.ns = "/"
-	v1.path = amp("/socket.io/")
+	v1.path = ampersand("/socket.io/")
 	v1.events = make(map[Namespace]map[Event]map[SocketID]eventCallback)
 	v1.onConnect = make(map[Namespace]onConnectCallbackVersion1)
 
 	v1.protectedEventName = v1ProtectedEventName
 
-	v1.eio = eio.NewServerV2(eio.WithPath(*v1.path)).(eio.EIOServer)
-	v1.transport = tmap.NewMapTransport(siop.NewPacketV2) // set the default transport
+	v1.eio = eio.NewServerV2(
+		eio.WithPath(*v1.path), eio.WithInitialPackets(autoConnect(v1, siop.NewPacketV2)),
+	).(eio.EIOServer)
+	v1.transport = nmem.NewInMemoryTransport(siop.NewPacketV2) // set the default transport
 
 	v1.inSocketV1.binary = true   // for the v1 implementation this always is set to true
 	v1.inSocketV1.compress = true // for the v1 implementation this always is set to true
@@ -133,10 +119,7 @@ func (v1 *ServerV1) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := v1.serveHTTP(w, r.WithContext(ctx)); err != nil {
-		if errors.Is(err, eio.EndOfHandshake{}) {
-			if v1.doAutoReconnect != nil {
-				v1.doAutoReconnect(err.(eio.EndOfHandshake).SessionID)(w, r)
-			}
+		if errors.Is(err, eio.EOH) {
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -157,5 +140,5 @@ func (v1 *ServerV1) serveHTTP(w http.ResponseWriter, r *http.Request) (err error
 		return err
 	}
 
-	return v1.run(sioRequest(r), v1._socketID)
+	return v1.run(v1._socketID, sioRequest(r))
 }
