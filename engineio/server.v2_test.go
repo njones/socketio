@@ -1,11 +1,16 @@
 package engineio_test
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
-	"github.com/njones/socketio"
-	"github.com/njones/socketio/engineio"
+	eio "github.com/njones/socketio/engineio"
+	eios "github.com/njones/socketio/engineio/session"
+	"github.com/stretchr/testify/assert"
 )
 
 // CORS
@@ -13,22 +18,23 @@ import (
 
 type (
 	testFn          func(*testing.T)
-	testParamsInFn  func(engineio.Server) testFn
-	testParamsOutFn func(*testing.T) engineio.Server
+	testParamsInFn  func(eio.Server, []variables) testFn
+	testParamsOutFn func(*testing.T) (eio.Server, []variables)
 )
 
 func TestServerV2(t *testing.T) {
 	var opts = []func(*testing.T){}
-	var EIOv = 3
+	var EIOv = 2
 
 	runWithOptions := map[string]testParamsInFn{
-		"cors": func(v2 engineio.Server) testFn {
-			return CORSTestV2(opts, EIOv, v2)
+		"Polling": func(v2 eio.Server, out []variables) testFn {
+			return PollingTestV2(opts, EIOv, v2, out)
 		},
 	}
 
 	tests := map[string]testParamsOutFn{
-		"sending to the client": SendingToTheClientV2,
+		"basic": BasicV2,
+		"cors":  CORSV2,
 	}
 
 	for name, testParams := range tests {
@@ -39,40 +45,85 @@ func TestServerV2(t *testing.T) {
 
 }
 
-func CORSTestV2(opts []func(*testing.T), EIOv int, v2 engineio.Server) testFn {
+func PollingTestV2(opts []func(*testing.T), EIOv int, v2 eio.Server, out []variables) testFn {
 	return func(t *testing.T) {
 		for _, opt := range opts {
 			opt(t)
 		}
+
+		var (
+			server = httptest.NewServer(v2)
+			client = server.Client()
+		)
+
+		defer server.Close()
+
+		for _, v := range out {
+			req, err := http.NewRequest(v.method, fmt.Sprintf(v.url, server.URL, EIOv), v.body)
+			assert.NoError(t, err)
+
+			for k, v := range v.headers {
+				req.Header.Add(k, v)
+			}
+
+			resp, err := client.Do(req)
+			assert.NoError(t, err)
+
+			v.resp(t, resp)
+		}
 	}
 }
 
-func SendingToTheClientV2(t *testing.T) (a socketio.Server) {
-	// 	var (
-	// 		v2   = socketio.NewServerV2(testingQuickPoll)
-	// 		wait = new(sync.WaitGroup)
+type variables struct {
+	method  string
+	url     string
+	body    io.Reader
+	headers map[string]string
+	resp    func(*testing.T, *http.Response)
+}
 
-	// 		want = map[string][][]string{
-	// 			"grab1": {
-	// 				{`42["hello","can you hear me?",1,2,"abc"]`},
-	// 				{`42["hello","can you hear me?",1,2,"abc"]`},
-	// 				{`42["hello","can you hear me?",1,2,"abc"]`},
-	// 			},
-	// 		}
-	// 		count = len(want["grab1"])
+func BasicV2(t *testing.T) (a eio.Server, m []variables) {
+	v2 := eio.NewServerV2(
+		eio.WithTransport("hope", nil),
+		eio.WithGenerateIDFunc(func() eios.ID { return eios.ID("Apple") }),
+	)
 
-	// 		str = serialize.String
-	// 		one = serialize.Int(1)
-	// 	)
+	out := []variables{
+		{
+			method: "GET",
+			url:    "%s/engine.io/?EIO=%d&transport=polling",
+			resp: func(t *testing.T, resp *http.Response) {
+				var buf = new(bytes.Buffer)
+				n, err := buf.ReadFrom(resp.Body)
+				assert.Greater(t, n, int64(0))
+				assert.NoError(t, err)
 
-	// 	wait.Add(count)
-	// 	v2.OnConnect(func(socket *socketio.SocketV2) error {
-	// 		defer wait.Done()
+				assert.Equal(t, `68:0{"sid":"Apple","upgrades":["websocket","hope"],"pingTimeout":60000}`, buf.String())
+			},
+		},
+	}
+	return v2, out
+}
 
-	// 		socket.Emit("hello", str("can you hear me?"), one, serialize.Int(2), str("abc"))
-	// 		return nil
-	// 	})
+func CORSV2(t *testing.T) (a eio.Server, m []variables) {
+	v2 := eio.NewServerV2(
+		eio.WithGenerateIDFunc(func() eios.ID { return eios.ID("Apple") }),
+	)
 
-	// 	return v2, count, want, wait
-	return
+	out := []variables{
+		{
+			method:  "GET",
+			url:     "%s/engine.io/?EIO=%d&transport=polling",
+			headers: map[string]string{"origin": "localhost"},
+			resp: func(t *testing.T, resp *http.Response) {
+				var buf = new(bytes.Buffer)
+				n, err := buf.ReadFrom(resp.Body)
+				assert.Greater(t, n, int64(0))
+				assert.NoError(t, err)
+
+				assert.Equal(t, `61:0{"sid":"Apple","upgrades":["websocket"],"pingTimeout":60000}`, buf.String())
+			},
+		},
+	}
+	return v2, out
 }

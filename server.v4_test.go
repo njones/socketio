@@ -16,11 +16,11 @@ import (
 )
 
 func TestServerV4(t *testing.T) {
-	var opts = []func(*testing.T){runTest("")}
+	var opts = []func(*testing.T){}
 	var EIOv = 4
 
 	runWithOptions := map[string]testParamsInFn{
-		".polling": func(v4 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
+		"Polling": func(v4 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
 			return PollingTestV4(opts, EIOv, v4, count, seq, syncOn)
 		},
 	}
@@ -59,10 +59,14 @@ func PollingTestV4(opts []func(*testing.T), EIOv int, v4 socketio.Server, count 
 			opt(t)
 		}
 
+		t.Parallel()
+
 		var (
 			server = httptest.NewServer(v4)
 			client = make([]*testClient, count)
 		)
+
+		defer server.Close()
 
 		for i := 0; i < count; i++ {
 			client[i] = &testClient{polling: &v3PollingClient{

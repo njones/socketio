@@ -1,4 +1,4 @@
-package itest
+package itst
 
 import (
 	"strings"
@@ -49,5 +49,19 @@ func SkipTest(testNames ...string) func(*testing.T) {
 				t.SkipNow()
 			}
 		}
+	}
+}
+
+func DoNotTest(testSuffixes ...string) func(*testing.T) bool {
+	return func(t *testing.T) bool {
+		t.Helper()
+
+		idx := strings.LastIndex(t.Name(), ".")
+		for _, suffix := range testSuffixes {
+			if t.Name() == t.Name()[:idx]+"."+suffix {
+				return false
+			}
+		}
+		return true
 	}
 }
