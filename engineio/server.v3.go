@@ -137,7 +137,7 @@ func (v3 *serverV3) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 func (v3 *serverV3) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	transport, err := v3.serveTransport(w, r)
 	if err != nil {
-		if errors.Is(err, EndOfHandshake{}) {
+		if errors.Is(err, EOH) {
 			return nil
 		}
 		return err
@@ -204,5 +204,5 @@ func (v3 *serverV3) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 	}
 
 	// End Of Handshake
-	return transport, EndOfHandshake{SessionID: sessionID.String()}
+	return transport, EOH
 }
