@@ -1,4 +1,6 @@
-package tmap
+// Package memory provides an in-memory map for connecting the SocketIO to EngineIO transport
+
+package memory
 
 import (
 	"sync"
@@ -6,13 +8,13 @@ import (
 
 	eiot "github.com/njones/socketio/engineio/transport"
 	siop "github.com/njones/socketio/protocol"
-	sess "github.com/njones/socketio/session"
+	sios "github.com/njones/socketio/session"
 	siot "github.com/njones/socketio/transport"
 )
 
 type (
 	SessionID = eiot.SessionID
-	SocketID  = sess.ID
+	SocketID  = siot.SocketID
 
 	Option = siop.Option
 	Socket = siot.Socket
@@ -22,12 +24,13 @@ type (
 	Room      = string
 )
 
-// mapTransport is the structure that holds a mapping of all connected
+// inMemoryTransport is the structure that holds a mapping of all connected
 // clients in memory.
-type mapTransport struct {
+type inMemoryTransport struct {
+	// The current ACK id number
 	ackCount uint64
 
-	// hold the eioSessionID to socketID relationship
+	// The EngineIO (SessionID) to SocketIO (SocketID) relationship
 	ṁ *sync.RWMutex
 	m map[SessionID]SocketID
 
@@ -39,19 +42,22 @@ type mapTransport struct {
 	ṙ *sync.Mutex
 	r map[Namespace]map[SocketID]map[Room]struct{}
 
+	// The function that will provide a New Packet based on the supplied codec
 	f siop.NewPacket
 }
 
-// NewMapTransport returns a mapTransport object with all defaults.
-func NewMapTransport(sioUsePacketVersion siop.NewPacket) *mapTransport {
-	return &mapTransport{
+// NewInMemoryTransport returns a mapTransport object with all defaults.
+// Pass in the version that must be used for creating new packets based
+// on the codec that is being used.
+func NewInMemoryTransport(fn siop.NewPacket) *inMemoryTransport {
+	return &inMemoryTransport{
 		ṁ: new(sync.RWMutex),
 		m: make(map[SessionID]SocketID),
 		ṡ: new(sync.RWMutex),
 		s: make(map[SocketID]*siot.Transport),
 		ṙ: new(sync.Mutex),
 		r: make(map[Namespace]map[SocketID]map[Room]struct{}),
-		f: sioUsePacketVersion,
+		f: fn,
 	}
 }
 
@@ -59,27 +65,25 @@ func NewMapTransport(sioUsePacketVersion siop.NewPacket) *mapTransport {
 // This number starts from one every time the server is restarted. This
 // could cause issues if the server is restarting before the AckID that
 // was previously sent is consumed.
-func (tr *mapTransport) AckID() uint64 {
+func (tr *inMemoryTransport) AckID() uint64 {
 	atomic.AddUint64(&tr.ackCount, 1)
 	return atomic.LoadUint64(&tr.ackCount)
 }
 
-func (tr *mapTransport) Transport(socketID SocketID) *siot.Transport {
+func (tr *inMemoryTransport) Transport(socketID SocketID) *siot.Transport {
 	tr.ṡ.Lock()
 	defer tr.ṡ.Unlock()
 	return tr.s[socketID]
 }
 
-// socketID to transport relationship methods
-
 // Add creates a new socket id based on adding the EngineIO transport
 // to the internal map. It returns the new socket id and any errors.
-func (tr *mapTransport) Add(et eiot.Transporter) (SocketID, error) {
+func (tr *inMemoryTransport) Add(et eiot.Transporter) (SocketID, error) {
 	sessionID := et.ID()
 
 	tr.ṁ.Lock()
 	if _, ok := tr.m[sessionID]; !ok {
-		tr.m[sessionID] = sess.GenerateID()
+		tr.m[sessionID] = sios.GenerateID(sessionID.String())
 	}
 	socketID := tr.m[et.ID()]
 	tr.ṁ.Unlock()
@@ -87,7 +91,8 @@ func (tr *mapTransport) Add(et eiot.Transporter) (SocketID, error) {
 	return socketID, tr.Set(socketID, et)
 }
 
-func (tr *mapTransport) Set(socketID SocketID, et eiot.Transporter) error {
+// Set sets an explicit mapping between the socketID and the EngineIO et Transporter
+func (tr *inMemoryTransport) Set(socketID SocketID, et eiot.Transporter) error {
 	tr.ṡ.Lock()
 	defer tr.ṡ.Unlock()
 
@@ -99,7 +104,8 @@ func (tr *mapTransport) Set(socketID SocketID, et eiot.Transporter) error {
 	return nil
 }
 
-func (tr *mapTransport) Receive(socketID SocketID) <-chan Socket {
+// Receive takes a socketIO socketID and receives sockets on a channel. These should come from an EngineIO transport.
+func (tr *inMemoryTransport) Receive(socketID SocketID) <-chan Socket {
 	tr.ṡ.Lock()
 	defer tr.ṡ.Unlock()
 
@@ -109,7 +115,9 @@ func (tr *mapTransport) Receive(socketID SocketID) <-chan Socket {
 	return nil
 }
 
-func (tr *mapTransport) Send(socketID SocketID, data Data, opts ...Option) error {
+// Send sends a socketID and data to the EngineIo transport the data is the Data packet of
+// a socketio packet. The options fill in the Type, Namespace and AckID values of a packet
+func (tr *inMemoryTransport) Send(socketID SocketID, data Data, opts ...Option) error {
 	tr.ṡ.Lock()
 	defer tr.ṡ.Unlock()
 
@@ -122,7 +130,7 @@ func (tr *mapTransport) Send(socketID SocketID, data Data, opts ...Option) error
 
 // namespace/socketID to room relationship
 
-func (tr *mapTransport) Join(ns Namespace, socketID SocketID, room Room) error {
+func (tr *inMemoryTransport) Join(ns Namespace, socketID SocketID, room Room) error {
 	tr.ṙ.Lock()
 	defer tr.ṙ.Unlock()
 
@@ -136,7 +144,7 @@ func (tr *mapTransport) Join(ns Namespace, socketID SocketID, room Room) error {
 	return nil
 }
 
-func (tr *mapTransport) Leave(ns Namespace, socketID SocketID, room Room) error {
+func (tr *inMemoryTransport) Leave(ns Namespace, socketID SocketID, room Room) error {
 	tr.ṙ.Lock()
 	defer tr.ṙ.Unlock()
 
@@ -151,7 +159,7 @@ func (tr *mapTransport) Leave(ns Namespace, socketID SocketID, room Room) error 
 	return nil
 }
 
-func (tr *mapTransport) Sockets(namespace Namespace) siot.SocketArray {
+func (tr *inMemoryTransport) Sockets(namespace Namespace) siot.SocketArray {
 	var ids []SocketID
 	for ns, socketIDs := range tr.r {
 		if ns == namespace {
@@ -175,7 +183,7 @@ func (tr *mapTransport) Sockets(namespace Namespace) siot.SocketArray {
 	))
 }
 
-func (tr *mapTransport) Rooms(namespace Namespace, socketID SocketID) siot.RoomArray {
+func (tr *inMemoryTransport) Rooms(namespace Namespace, socketID SocketID) siot.RoomArray {
 	var names []Room
 
 FindingRoomNames:

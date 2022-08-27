@@ -1,4 +1,4 @@
-package tmap_test
+package memory_test
 
 import (
 	"fmt"
@@ -9,20 +9,20 @@ import (
 	"testing"
 	"time"
 
-	tmap "github.com/njones/socketio/adaptor/transport/map"
+	tmap "github.com/njones/socketio/adaptor/transport/memory"
 	eiop "github.com/njones/socketio/engineio/protocol"
 	eiot "github.com/njones/socketio/engineio/transport"
-	itest "github.com/njones/socketio/internal/test"
+	itst "github.com/njones/socketio/internal/test"
 	siop "github.com/njones/socketio/protocol"
 	sess "github.com/njones/socketio/session"
 	siot "github.com/njones/socketio/transport"
 	"github.com/stretchr/testify/assert"
 )
 
-var runTest, skipTest = itest.RunTest, itest.SkipTest
+var runTest, skipTest = itst.RunTest, itst.SkipTest
 
 func TestMapTransportSet(t *testing.T) {
-	memTransport := tmap.NewMapTransport(siop.NewPacketV2)
+	memTransport := tmap.NewInMemoryTransport(siop.NewPacketV2)
 	sidStr := "sio:aaa"
 	sid := siot.SocketID(sidStr)
 
@@ -38,7 +38,7 @@ func TestMapTransportSet(t *testing.T) {
 }
 
 func TestTransportAckID(t *testing.T) {
-	memTransport := tmap.NewMapTransport(siop.NewPacketV2)
+	memTransport := tmap.NewInMemoryTransport(siop.NewPacketV2)
 
 	collect := make(chan [2]uint64, 100)
 	unꢠ := new(sync.WaitGroup)
@@ -98,7 +98,7 @@ func TestMapTransport(t *testing.T) {
 			}
 
 			eTransporter := eiot.NewPollingTransport(1000, 10*time.Millisecond)(tmap.SessionID("12345"), codec)
-			sTransporter := tmap.NewMapTransport(siop.NewPacketV2)
+			sTransporter := tmap.NewInMemoryTransport(siop.NewPacketV2)
 
 			return data, packetData, eTransporter, sTransporter
 		},
@@ -112,7 +112,7 @@ func TestMapTransport(t *testing.T) {
 }
 
 func MapTransportTestSend(opts []func(*testing.T), data string, packetData string, etr eiot.Transporter, str siot.Transporter) func(t *testing.T) {
-	sess.GenerateID = func() tmap.SocketID { return tmap.SocketID("ABC123") }
+	sess.GenerateID = func(string) tmap.SocketID { return tmap.SocketID("ABC123") }
 	return func(t *testing.T) {
 		sid, err := str.Add(etr)
 		assert.NoError(t, err)
@@ -142,7 +142,7 @@ func MapTransportTestSend(opts []func(*testing.T), data string, packetData strin
 }
 
 func MapTransportTestReceive(opts []func(*testing.T), data string, packetData string, etr eiot.Transporter, str siot.Transporter) func(t *testing.T) {
-	sess.GenerateID = func() tmap.SocketID { return tmap.SocketID("ABC123") }
+	sess.GenerateID = func(string) tmap.SocketID { return tmap.SocketID("ABC123") }
 	return func(t *testing.T) {
 		sid, err := str.Add(etr)
 		assert.NoError(t, err)
@@ -195,7 +195,7 @@ func TestTransportMapJoinLeaveRooms(t *testing.T) {
 		name string
 		idx  *int
 		ids  []struct{ ns, rm, sio, eio string }
-		gen  func(inline) func() tmap.SocketID
+		gen  func(inline) func(string) tmap.SocketID
 		mix  func(*testing.T, siot.Transporter, inline)
 		eval func(*testing.T, siot.Transporter, inline)
 	}
@@ -375,15 +375,15 @@ func TestTransportMapJoinLeaveRooms(t *testing.T) {
 				test.idx = func() *int { var i int; return &i }()
 			}
 			if test.gen == nil {
-				test.gen = func(in inline) func() tmap.SocketID {
-					return func() tmap.SocketID {
+				test.gen = func(in inline) func(string) tmap.SocketID {
+					return func(string) tmap.SocketID {
 						return tmap.SocketID(in.ids[*in.idx].sio)
 					}
 				}
 			}
 
 			sess.GenerateID = test.gen(test)
-			tsp := tmap.NewMapTransport(siop.NewPacketV2)
+			tsp := tmap.NewInMemoryTransport(siop.NewPacketV2)
 			test.mix(t, tsp, test)
 			test.eval(t, tsp, test)
 		})
