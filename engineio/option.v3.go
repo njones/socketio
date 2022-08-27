@@ -26,17 +26,17 @@ type (
 	CORSmaxAge               int
 	CORSoptionsSuccessStatus int
 
-	corsOption interface{ val() interface{} } // the value needs to be de-boxed
+	corsOption interface{ val() interface{} } // the value needs to be un-boxed
 )
 
-func (x CORSenable) val() interface{}               { return x }
-func (x CORSorigin) val() interface{}               { return x }
-func (x CORSmethods) val() interface{}              { return x }
-func (x CORSheadersAllow) val() interface{}         { return x }
-func (x CORSheadersExpose) val() interface{}        { return x }
-func (x CORScredentials) val() interface{}          { return x }
-func (x CORSmaxAge) val() interface{}               { return x }
-func (x CORSoptionsSuccessStatus) val() interface{} { return x }
+func (x CORSenable) val() interface{}               { return bool(x) }
+func (x CORSorigin) val() interface{}               { return []string(x) }
+func (x CORSmethods) val() interface{}              { return []string(x) }
+func (x CORSheadersAllow) val() interface{}         { return []string(x) }
+func (x CORSheadersExpose) val() interface{}        { return []string(x) }
+func (x CORScredentials) val() interface{}          { return bool(x) }
+func (x CORSmaxAge) val() interface{}               { return int(x) }
+func (x CORSoptionsSuccessStatus) val() interface{} { return int(x) }
 
 func WithCors(opts ...corsOption) Option {
 	return func(svr Server) {

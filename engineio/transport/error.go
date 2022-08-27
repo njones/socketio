@@ -1,9 +1,9 @@
 package transport
 
-import errs "github.com/njones/socketio/internal/errors"
+import erro "github.com/njones/socketio/internal/errors"
 
 const (
-	ErrTransportDecode   errs.String = "[%s] transport decode: %w"
-	ErrTransportEncode   errs.String = "[%s] transport encode: %w"
-	ErrUnsupportedMethod errs.String = "%s not supported"
+	ErrTransportDecode   erro.String = "[%s] transport decode: %w"
+	ErrTransportEncode   erro.String = "[%s] transport encode: %w"
+	ErrUnsupportedMethod erro.String = "%s not supported"
 )

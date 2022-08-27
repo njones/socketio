@@ -38,7 +38,9 @@ func (dec *PacketDecoderV2) Decode(packet *PacketV2) error {
 	case OpenPacket:
 		var data HandshakeV2
 		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data).OnErrF(ErrHandshakeDecode, "v2", dec.read.Err())
-		packet.D = &data
+		if dec.read.IsNotErr() {
+			packet.D = &data
+		}
 	case MessagePacket:
 		var data = new(strings.Builder)
 		dec.read.Copy(data).OnErrF(ErrPacketDecode, "v2", dec.read.Err())

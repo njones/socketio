@@ -2,7 +2,7 @@ package socketio
 
 import seri "github.com/njones/socketio/serialize"
 
-func amp(s string) *string { return &s }
+func ampersand(s string) *string { return &s }
 
 // stoi is string to interface
 func stoi(s []string) []interface{} {

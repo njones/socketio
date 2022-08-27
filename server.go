@@ -4,8 +4,9 @@ import (
 	"math/rand"
 	"net/http"
 
+	eios "github.com/njones/socketio/engineio/session"
 	seri "github.com/njones/socketio/serialize"
-	sess "github.com/njones/socketio/session"
+	sios "github.com/njones/socketio/session"
 	siot "github.com/njones/socketio/transport"
 )
 
@@ -23,7 +24,8 @@ const (
 type (
 	// SocketID is am alias of a session id, so that we don't need to
 	// reference sessions through the package
-	SocketID = sess.ID
+	SessionID = eios.ID
+	SocketID  = sios.ID
 
 	Namespace = string
 	Room      = string
@@ -60,7 +62,7 @@ type emit interface {
 	Emit(event Event, data ...Data) error
 }
 
-type tsp interface {
+type rawTransport interface {
 	Transport(siot.SocketID) *siot.Transport
 }
 

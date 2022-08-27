@@ -56,6 +56,8 @@ func (v3 *serverV3) new(opts ...Option) *serverV3 {
 		PayloadDecoder: eiop.NewPayloadDecoderV3,
 	}
 
+	v3.cors.enable = true
+
 	if v3.servers == nil {
 		v3.servers = make(map[EIOVersionStr]server)
 	}
@@ -112,7 +114,7 @@ func (v3 *serverV3) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 			w.Header().Set("Access-Control-Expose-Headers", headersExpose)
 		}
 		if v3.cors.maxAge > 0 {
-			w.Header().Set("Access-Control-Expose-Headers", strconv.Itoa(v3.cors.maxAge))
+			w.Header().Set("Access-Control-Max-Age", strconv.Itoa(v3.cors.maxAge))
 		}
 		if v3.cors.optionsSuccessStatus > 0 {
 			w.WriteHeader(v3.cors.optionsSuccessStatus)
@@ -173,11 +175,6 @@ func (v3 *serverV3) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 		},
 	}
 
-	packets := []eiop.Packet{handshakePacket}
-	if v3.initialPacket != nil {
-		packets = append(packets, v3.initialPacket())
-	}
-
 	transportFunc, ok := v3.transports[transportName]
 	if !ok {
 		return nil, ErrNoTransport
@@ -185,6 +182,11 @@ func (v3 *serverV3) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 
 	transport := transportFunc(sessionID, v3.codec)
 	v3.sessions.Set(transport)
+
+	packets := []eiop.Packet{handshakePacket}
+	if v3.initialPackets != nil {
+		packets = append(packets, v3.initialPackets(transport, r)...)
+	}
 
 	if err := v3.codec.PayloadEncoder.To(w).WritePayload(eiop.Payload(packets)); err != nil {
 		return nil, ErrPayloadEncode.F(err)

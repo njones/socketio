@@ -3,7 +3,7 @@ package socketio
 import (
 	"net/http"
 
-	tmap "github.com/njones/socketio/adaptor/transport/map"
+	nmem "github.com/njones/socketio/adaptor/transport/memory"
 	eio "github.com/njones/socketio/engineio"
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
@@ -35,10 +35,9 @@ func (v3 *ServerV3) new(opts ...Option) Server {
 
 	v1.run = runV3(v3)
 	v1.eio = eio.NewServerV4(eio.WithPath(*v1.path)).(eio.EIOServer) // v2 uses the default engineio protocol v3
-	v1.transport = tmap.NewMapTransport(siop.NewPacketV4)            // v2 uses the default socketio protocol v3
+	v1.transport = nmem.NewInMemoryTransport(siop.NewPacketV4)       // v2 uses the default socketio protocol v3
 	v1.protectedEventName = v3ProtectedEventName
 	v1.doConnectPacket = doConnectPacketV3(v3)
-	v1.doAutoReconnect = nil
 
 	v3.doBinaryAckPacket = doBinaryAckPacket(v1)
 	v3.inSocketV3.prev = v2.inSocketV2

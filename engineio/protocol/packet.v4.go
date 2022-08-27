@@ -42,11 +42,12 @@ func (dec *PacketDecoderV4) Decode(packet *PacketV4) error {
 		return dec.read.Err()
 	}
 
-	var v3 = PacketV3{Packet: packet.Packet}
+	var v3 = packet.PacketV3
 	if dec.read.IsNotErr() {
 		dec.read.ConditionalErr(dec.PacketDecoderV3.Decode(&v3)).OnErrF(ErrPacketDecode, "v4", dec.read.Err())
 		packet.D = v3.D
 	}
+
 	return dec.read.Err()
 }
 
@@ -57,7 +58,6 @@ var NewPacketEncoderV4 _packetEncoderV4 = func(w io.Writer) *PacketEncoderV4 {
 }
 
 func (enc *PacketEncoderV4) Encode(packet PacketV4) (err error) {
-
 	switch packet.T {
 	case BinaryPacket:
 		enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v4", enc.write.Err())
@@ -67,10 +67,10 @@ func (enc *PacketEncoderV4) Encode(packet PacketV4) (err error) {
 		case io.Reader:
 			enc.write.UseEncoder(_packetBase64encoder(base64.NewEncoder)).Encode(data).OnErrF(ErrPacketEncode, "v4", enc.write.Err())
 		default:
-			return fmt.Errorf("bad packet dinary encode type: %T", data)
+			return fmt.Errorf("bad packet binary encode type: %T", data)
 		}
 		return enc.write.Err()
 	}
 
-	return enc.PacketEncoderV3.Encode(PacketV3{Packet: packet.Packet})
+	return enc.PacketEncoderV3.Encode(PacketV3{PacketV2{Packet: packet.Packet}, false})
 }

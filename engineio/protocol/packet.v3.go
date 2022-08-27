@@ -13,7 +13,7 @@ import (
 
 // PacketV3 is defined: https://github.com/socketio/engine.io-protocol/tree/v3
 type PacketV3 struct {
-	Packet
+	PacketV2
 	IsBinary bool
 }
 
@@ -38,12 +38,14 @@ func (dec *PacketDecoderV3) Decode(packet *PacketV3) error {
 	switch packet.T {
 	case OpenPacket:
 		var data HandshakeV3
-		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data)
-		packet.D = data
+		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data).OnErrF(ErrHandshakeDecode, "v3", dec.read.Err())
+		if dec.read.IsNotErr() {
+			packet.D = &data
+		}
 		return dec.read.Err()
 	}
 
-	var v2 = PacketV2{Packet: packet.Packet}
+	var v2 = packet.PacketV2
 	if dec.read.IsNotErr() {
 		dec.read.ConditionalErr(dec.PacketDecoderV2.Decode(&v2)).OnErrF(ErrPacketDecode, "v3", dec.read.Err())
 		packet.D = v2.D

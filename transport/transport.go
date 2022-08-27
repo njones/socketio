@@ -5,22 +5,28 @@ import (
 	"strings"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
-	eess "github.com/njones/socketio/engineio/session"
+	eios "github.com/njones/socketio/engineio/session"
 	eiot "github.com/njones/socketio/engineio/transport"
 	siop "github.com/njones/socketio/protocol"
-	sess "github.com/njones/socketio/session"
+	sios "github.com/njones/socketio/session"
 )
 
 type (
-	SessionID = eess.ID
-	SocketID  = sess.ID
-	Option    = siop.Option
+	// The EngineIO session ID
+	SessionID = eios.ID
+
+	// The SocketID session ID
+	SocketID = sios.ID
+
+	// The functional option that can be used with Packets
+	Option = siop.Option
 
 	Namespace = string
 	Room      = string
 
-	Data interface{}
+	Data interface{} // The Data packet type
 
+	// Socket is a generic socket that is passed to the emit function during execution
 	Socket struct {
 		Type      byte
 		Namespace string
@@ -29,30 +35,42 @@ type (
 	}
 )
 
+// buffer holds EngineIO packets until the buffer is stopped. This is used
+// when waiting to send a connection packet back first even though it may
+// not be processed first.
 type buffer struct {
 	active  bool
 	packets []eiop.Packet
 }
 
-func (buf *buffer) StartBuffer() { buf.active = true }
-func (buf *buffer) StopBuffer()  { buf.active = false }
+// StartBuffer starts buffering EngineIO packets
+func (buf *buffer) StartBuffer() func() {
+	buf.active = true
+	return buf.StopBuffer
+}
 
+// StopBuffer stops buffering EngineIO packets
+func (buf *buffer) StopBuffer() { buf.active = false }
+
+// Transport facilitates transferring between the SocketIO transport which
+// is in-memory or something like redis to the EngineIO transport which is
+// HTTP long polling, Websockets or Server-Side events
 type Transport struct {
 	id SocketID
 
 	*buffer
 
 	receive      chan Socket
-	packetMaker  siop.NewPacket
+	newPacket    siop.NewPacket
 	eioTransport eiot.Transporter
 }
 
-func NewTransport(id SocketID, eioTransport eiot.Transporter, packetMaker siop.NewPacket) *Transport {
+func NewTransport(id SocketID, eioTransport eiot.Transporter, fn siop.NewPacket) *Transport {
 	return &Transport{
 		buffer:       &buffer{},
 		id:           id,
 		receive:      make(chan Socket, 1000),
-		packetMaker:  packetMaker,
+		newPacket:    fn,
 		eioTransport: eioTransport,
 	}
 }
@@ -64,7 +82,7 @@ func (t *Transport) SendBuffer() {
 }
 
 func (t *Transport) Send(data Data, opts ...Option) {
-	sioPacket := t.packetMaker().WithData(data).WithOption(opts...)
+	sioPacket := t.newPacket().WithData(data).WithOption(opts...)
 	eioPacket := eiop.Packet{T: eiop.MessagePacket, D: sioPacket}
 	if t.buffer.active {
 		t.buffer.packets = append(t.buffer.packets, eioPacket)
@@ -79,7 +97,7 @@ func (t *Transport) Receive() <-chan Socket {
 
 			switch data := eioPacket.D.(type) {
 			case string:
-				sioPacket := t.packetMaker().(io.ReaderFrom)
+				sioPacket := t.newPacket().(io.ReaderFrom)
 				if _, err := sioPacket.ReadFrom(strings.NewReader(data)); err != nil {
 					t.eioTransport.Send(eiop.Packet{T: eiop.NoopPacket, D: err})
 				}
@@ -98,7 +116,6 @@ func (t *Transport) Receive() <-chan Socket {
 									bin(r)
 								}
 							}
-
 						}
 					}
 				}
@@ -111,7 +128,7 @@ func (t *Transport) Receive() <-chan Socket {
 				if done, ok := eioPacket.D.(interface{ SocketCloseChannel() error }); ok {
 
 					if err := done.SocketCloseChannel(); err != nil {
-						sioPacket := t.packetMaker().
+						sioPacket := t.newPacket().
 							WithType(siop.ErrorPacket.Byte()).
 							WithData(err)
 						t.receive <- packetToSocket(sioPacket.(packet))

@@ -4,8 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/njones/socketio/serialize"
-	"github.com/njones/socketio/session"
+	seri "github.com/njones/socketio/serialize"
 	siot "github.com/njones/socketio/transport"
 )
 
@@ -111,13 +110,13 @@ func (v4 inSocketV4) Emit(event Event, data ...Data) error {
 		// send to local server ... since this is not a broadcast
 		if ns, ok := v1.events[v1.nsp()]; ok {
 			if events, ok := ns[event][v1._socketID]; ok {
-				events.Callback(serialize.Convert(data).ToInterface()...)
+				events.Callback(seri.Convert(data).ToInterface()...)
 			}
 		}
 		return v1.emit(event, data...)
 	}
 
-	var uniqueID = map[session.ID]struct{}{}
+	var uniqueID = map[SocketID]struct{}{}
 	for _, exceptRoom := range v4.except {
 		rooms, err := transport.Sockets(v1.nsp()).FromRoom(exceptRoom)
 		if err != nil {

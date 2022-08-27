@@ -6,8 +6,7 @@ import (
 
 	call "github.com/njones/socketio/callback"
 	siop "github.com/njones/socketio/protocol"
-	"github.com/njones/socketio/serialize"
-	"github.com/njones/socketio/session"
+	seri "github.com/njones/socketio/serialize"
 	siot "github.com/njones/socketio/transport"
 )
 
@@ -135,7 +134,7 @@ func (v1 inSocketV1) To(room Room) inToEmit {
 
 // Emit - sending to all connected clients
 func (v1 inSocketV1) Emit(event Event, data ...Data) error {
-	var uniqueID = map[session.ID]struct{}{}
+	var uniqueID = map[SocketID]struct{}{}
 	for _, id := range v1.id {
 		uniqueID[id] = struct{}{}
 	}
@@ -155,7 +154,7 @@ func (v1 inSocketV1) Emit(event Event, data ...Data) error {
 		// send to local server ... since this is not a broadcast
 		if ns, ok := v1.events[v1.nsp()]; ok {
 			if events, ok := ns[event][v1._socketID]; ok {
-				events.Callback(serialize.Convert(data).ToInterface()...)
+				events.Callback(seri.Convert(data).ToInterface()...)
 			}
 		}
 		return v1.emit(event, data...)
