@@ -130,10 +130,12 @@ func (v2 *serverV2) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	eioVersion := eioVersionFrom(r)
 	if v, ok := v2.servers[eioVersion]; ok {
 		if transport, err := v.serveTransport(w, r); err != nil {
+			if errors.Is(err, EOH) {
+				return
+			}
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		} else if err = transport.Run(w, r); err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			// return ErrTransportRun.F(err)
 		}
 
 		return
@@ -218,7 +220,7 @@ func (v2 *serverV2) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.
 	}
 
 	// End Of Handshake
-	return transport, EndOfHandshake{SessionID: sessionID.String()}
+	return transport, EOH
 }
 
 func (v2 *serverV2) doUpgrade(t eiot.Transporter /*id SessionID, from,*/, to eiot.Name) (eiot.Transporter, bool) {

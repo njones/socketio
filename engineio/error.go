@@ -13,11 +13,4 @@ const (
 	ErrPayloadEncode      erro.String = "bad payload encode: %w"
 )
 
-type EndOfHandshake struct{ SessionID string }
-
-func (e EndOfHandshake) Is(err error) bool {
-	_, ok := err.(EndOfHandshake)
-	return ok
-}
-
-func (e EndOfHandshake) Error() string { return "end of handshake" }
+const EOH erro.String = "end of handshake"
