@@ -16,7 +16,7 @@ import (
 )
 
 func TestWebsocketTransport(t *testing.T) {
-	var opts = []func(*testing.T){runTest("")}
+	var opts = []func(*testing.T){}
 
 	type (
 		testFn          func(*testing.T)

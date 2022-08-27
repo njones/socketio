@@ -8,11 +8,11 @@ import (
 	"time"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
-	itest "github.com/njones/socketio/internal/test"
+	itst "github.com/njones/socketio/internal/test"
 	"github.com/stretchr/testify/assert"
 )
 
-var runTest = itest.RunTest
+var runTest = itst.RunTest
 
 func TestPollingTransport(t *testing.T) {
 	var opts = []func(*testing.T){}

@@ -14,69 +14,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/njones/socketio"
+	sio "github.com/njones/socketio"
 	eio "github.com/njones/socketio/engineio"
 	eiot "github.com/njones/socketio/engineio/transport"
+	itst "github.com/njones/socketio/internal/test"
 	"github.com/stretchr/testify/assert"
 )
 
 type (
 	testFn          func(*testing.T)
-	testParamsInFn  func(socketio.Server, int, map[string][][]string, *sync.WaitGroup) testFn
-	testParamsOutFn func(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup)
+	testParamsInFn  func(sio.Server, int, map[string][][]string, *sync.WaitGroup) testFn
+	testParamsOutFn func(*testing.T) (sio.Server, int, map[string][][]string, *sync.WaitGroup)
 )
 
-var (
-	testingName = strings.NewReplacer(" ", "_")
-	_, _        = runTest, skipTest
-)
+var runTest, skipTest = itst.RunTest, itst.SkipTest
+var testingQuickPoll = eio.WithTransport("polling", eiot.NewPollingTransport(1000, 5*time.Millisecond))
 
 func checkCount(t *testing.T, count int) {
 	if !assert.Greater(t, count, 0, "%s: make sure that the want map key is correct", t.Name()) {
 		t.SkipNow()
-	}
-}
-
-func runTest(testNames ...string) func(*testing.T) {
-	return func(t *testing.T) {
-		t.Helper()
-
-		have := strings.SplitN(t.Name(), "/", 2)[1]
-		suffix := strings.Split(have, ".")[1]
-
-		for _, testName := range testNames {
-			if testName == "" || testName == "*" {
-				return
-			}
-
-			want := testingName.Replace(testName)
-			if !strings.Contains(want, ".") {
-				want += "." + suffix
-			}
-			if have == want {
-				return
-			}
-		}
-		t.SkipNow()
-	}
-}
-
-func skipTest(testNames ...string) func(*testing.T) {
-	return func(t *testing.T) {
-		t.Helper()
-
-		have := strings.SplitN(t.Name(), "/", 2)[1]
-		suffix := strings.Split(have, ".")[1]
-
-		for _, testName := range testNames {
-			want := testingName.Replace(testName)
-			if !strings.Contains(want, ".") {
-				want += "." + suffix
-			}
-			if have == want {
-				t.SkipNow()
-			}
-		}
 	}
 }
 
@@ -86,8 +42,6 @@ func (fn testBinaryEventFunc) Callback(v ...interface{}) error {
 	fn(v[0].(io.Reader))
 	return nil
 }
-
-var testingQuickPoll = eio.WithTransport("polling", eiot.NewPollingTransport(1000, 5*time.Millisecond))
 
 type pollingClient interface {
 	connect(...[]string)

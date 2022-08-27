@@ -2,11 +2,55 @@ package protocol
 
 import (
 	"fmt"
+	"io"
+	"math/rand"
 	"testing"
 	"time"
 
+	itst "github.com/njones/socketio/internal/test"
 	"github.com/stretchr/testify/assert"
 )
+
+var runTest, skipTest = itst.RunTest, itst.SkipTest
+var _, _ = runTest, skipTest
+
+type shortReader struct {
+	max int
+	ran rand.Rand
+	r   io.Reader
+}
+
+func (sr shortReader) Read(p []byte) (n int, err error) {
+	var x = 100
+	for x > 0 && err == nil {
+		i := n + sr.ran.Intn(sr.max) + 1
+		if len(p) < i {
+			i = len(p)
+		}
+		x, err = sr.r.Read(p[n:i])
+		n += x
+	}
+	return n, err
+}
+
+type shortWriter struct {
+	max int
+	ran rand.Rand
+	w   io.Writer
+}
+
+func (sw shortWriter) Write(p []byte) (n int, err error) {
+	var x, j = len(p), 0
+	for n < x && err == nil {
+		i := n + sw.ran.Intn(sw.max) + 1
+		if x < i {
+			i = x
+		}
+		j, err = sw.w.Write(p[n:i])
+		n += j
+	}
+	return n, err
+}
 
 func TestPacketLength(t *testing.T) {
 	var opts = []func(*testing.T){}

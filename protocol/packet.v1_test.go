@@ -6,276 +6,172 @@ import (
 	"strings"
 	"testing"
 
+	itst "github.com/njones/socketio/internal/test"
 	"github.com/stretchr/testify/assert"
 )
 
-type testOption func(*testing.T)
-
 var notAuthorized = "Not authorized"
+var runTest, skipTest = itst.RunTest, itst.SkipTest
 
-var testingName = strings.NewReplacer(" ", "_")
-
-func runTest(testNames ...string) func(*testing.T) {
-	return func(t *testing.T) {
-		t.Helper()
-
-		have := strings.SplitN(t.Name(), "/", 2)[1]
-		suffix := strings.Split(have, ".")[1]
-
-		for _, testName := range testNames {
-			if testName == "" || testName == "*" {
-				return
-			}
-
-			want := testingName.Replace(testName)
-			if !strings.Contains(want, ".") {
-				want += "." + suffix
-			}
-			if have == want {
-				return
-			}
-		}
-		t.SkipNow()
-	}
-}
-
-func skipTest(testNames ...string) func(*testing.T) {
-	return func(t *testing.T) {
-		t.Helper()
-
-		have := strings.SplitN(t.Name(), "/", 2)[1]
-		suffix := strings.Split(have, ".")[1]
-
-		for _, testName := range testNames {
-			want := testingName.Replace(testName)
-			if !strings.Contains(want, ".") {
-				want += "." + suffix
-			}
-			if have == want {
-				t.SkipNow()
-			}
-		}
-	}
-}
-
-func TestPacketV1Read(t *testing.T) {
-	var opts = []func(*testing.T){}
+func TestPacketV1(t *testing.T) {
+	var opts = []func(*testing.T) bool{}
 
 	type (
 		testFn          func(*testing.T)
-		testParamsInFn  func(pac PacketV1, want []byte, xerr error) testFn
-		testParamsOutFn func(*testing.T) (pac PacketV1, want []byte, xerr error)
+		testParamsInFn  func(PacketV1, []byte, error) testFn
+		testParamsOutFn func(*testing.T) (PacketV1, []byte, error)
 	)
 
 	runWithOptions := map[string]testParamsInFn{
-		"ReadFrom": func(pac PacketV1, want []byte, xerr error) testFn {
+		"ReadFrom": func(input PacketV1, output []byte, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					opt(t)
+					if !opt(t) {
+						return
+					}
 				}
 
 				var have = new(bytes.Buffer)
-				n, err := have.ReadFrom(&pac)
-				assert.Equal(t, int64(len(want)), n)
-				assert.Equal(t, xerr, err)
+				n, err := have.ReadFrom(&input)
+				assert.Equal(t, int64(len(output)), n)
+				assert.Equal(t, xErr, err)
 
-				assert.Equal(t, want, have.Bytes())
+				assert.Equal(t, output, have.Bytes())
 			}
 		},
-		"WriteTo": func(pac PacketV1, want []byte, xerr error) testFn {
+		"Write": func(output PacketV1, input []byte, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					opt(t)
+					if !opt(t) {
+						return
+					}
+				}
+
+				var packet PacketV1
+				n, err := (&packet).Write(input)
+
+				assert.Equal(t, len(input), n, "the data length")
+				assert.ErrorIs(t, err, xErr)
+
+				assert.Equal(t, output.Type, packet.Type, "the packet type")
+				assert.Equal(t, output.Namespace, packet.Namespace, "the namespace:")
+				assert.Equal(t, output.AckID, packet.AckID, "the ackID")
+			}
+		},
+		"WriteTo": func(input PacketV1, output []byte, xErr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					if !opt(t) {
+						return
+					}
 				}
 
 				var have = new(bytes.Buffer)
-				n, err := pac.WriteTo(have)
-				assert.Equal(t, int64(len(want)), n)
-				assert.Equal(t, xerr, err)
+				n, err := input.WriteTo(have)
+				assert.Equal(t, int64(len(output)), n)
+				assert.Equal(t, xErr, err)
 
-				assert.Equal(t, want, have.Bytes())
+				assert.Equal(t, output, have.Bytes())
 			}
 		},
 	}
 
 	spec := map[string]testParamsOutFn{
 		"CONNECT": func(*testing.T) (PacketV1, []byte, error) {
-			want := []byte(`0`)
-			data := *NewPacketV1().(*PacketV1)
-			return data, want, nil
+			asBytes := []byte(`0`)
+			asPacket := *NewPacketV1().WithNamespace("/").(*PacketV1)
+			return asPacket, asBytes, nil
 		},
 		"DISCONNECT": func(*testing.T) (PacketV1, []byte, error) {
-			want := []byte(`1/admin`)
-			data := *NewPacketV1().
+			asBytes := []byte(`1/admin`)
+			asPacket := *NewPacketV1().
 				WithType(DisconnectPacket.Byte()).
 				WithNamespace("/admin").(*PacketV1)
-			return data, want, nil
+			return asPacket, asBytes, nil
 		},
 		"EVENT": func(*testing.T) (PacketV1, []byte, error) {
-			want := []byte(`2["hello",1]`)
-			data := *NewPacketV1().
+			asBytes := []byte(`2["hello",1]`)
+			asPacket := *NewPacketV1().
 				WithType(EventPacket.Byte()).
+				WithNamespace("/").
 				WithData([]interface{}{"hello", 1.0}).(*PacketV1)
-			return data, want, nil
+			return asPacket, asBytes, nil
 		},
 		"EVENT with AckID": func(*testing.T) (PacketV1, []byte, error) {
-			want := []byte(`2/admin,456["project:delete",123]`)
-			data := *NewPacketV1().
+			asBytes := []byte(`2/admin,456["project:delete",123]`)
+			asPacket := *NewPacketV1().
 				WithType(EventPacket.Byte()).
 				WithNamespace("/admin").
 				WithData([]interface{}{"project:delete", 123.0}).
 				WithAckID(456).(*PacketV1)
-			return data, want, nil
+			return asPacket, asBytes, nil
 		},
 		"ACK": func(*testing.T) (PacketV1, []byte, error) {
-			want := []byte(`3/admin,456[]`)
-			data := *NewPacketV1().
+			asBytes := []byte(`3/admin,456[]`)
+			asPacket := *NewPacketV1().
 				WithType(AckPacket.Byte()).
 				WithNamespace("/admin").
 				WithData([]interface{}{}).
 				WithAckID(456).(*PacketV1)
-			return data, want, nil
+			return asPacket, asBytes, nil
 		},
 		"ERROR": func(*testing.T) (PacketV1, []byte, error) {
-			want := []byte(`4/admin,"Not authorized"`)
-			data := *NewPacketV1().
+			asBytes := []byte(`4/admin,"Not authorized"`)
+			asPacket := *NewPacketV1().
 				WithType(ErrorPacket.Byte()).
 				WithNamespace("/admin").
 				WithData(&notAuthorized).(*PacketV1)
-			return data, want, nil
+			return asPacket, asBytes, nil
 		},
 
 		// extra
 		"CONNECT /admin ns": func(*testing.T) (PacketV1, []byte, error) {
-			want := []byte(`0/admin`)
-			data := *NewPacketV1().
+			asBytes := []byte(`0/admin`)
+			asPacket := *NewPacketV1().
 				WithNamespace("/admin").(*PacketV1)
-			return data, want, nil
+			return asPacket, asBytes, nil
 		},
 		"CONNECT /admin ns and extra info": func(*testing.T) (PacketV1, []byte, error) {
-			want := []byte(`0/admin?token=1234&uid=abcd`)
-			data := *NewPacketV1().
+			asBytes := []byte(`0/admin?token=1234&uid=abcd`)
+			asPacket := *NewPacketV1().
 				WithNamespace("/admin?token=1234&uid=abcd").(*PacketV1)
-			return data, want, nil
+			return asPacket, asBytes, nil
 		},
-		"EVENT with Binary": func(*testing.T) (PacketV1, []byte, error) {
-			want := []byte(`2[]`)
-			data := *NewPacketV1().
+		"EVENT with Binary": func(t2 *testing.T) (PacketV1, []byte, error) {
+			opts = append(opts, itst.DoNotTest("Write"))
+
+			asError := ErrBinaryDataUnsupported
+			asBytes := []byte(`2[]`)
+			asPacket := *NewPacketV1().
 				WithType(EventPacket.Byte()).
 				WithNamespace("/").
 				WithData([]interface{}{strings.NewReader("binary data")}).(*PacketV1)
-			return data, want, ErrBinaryDataUnsupported
+
+			return asPacket, asBytes, asError
+		},
+		"EVENT with Binary unsupported": func(*testing.T) (PacketV1, []byte, error) {
+			asBytes := []byte(`2["unsupported",{"base64":true,"data":"xAtiaW5hcnkgZGF0YQ=="}]`)
+			asPacket := *NewPacketV1().
+				WithType(EventPacket.Byte()).
+				WithNamespace("/").
+				WithData([]interface{}{
+					"unsupported",
+					map[string]interface{}{"base64": true, "data": "xAtiaW5hcnkgZGF0YQ=="},
+				}).(*PacketV1)
+			return asPacket, asBytes, nil
 		},
 		"EVENT with Object": func(*testing.T) (PacketV1, []byte, error) {
-			want := []byte(`2["hello",{"playground":"world","wake":{"won":["too",3]}}]`)
-			data := *NewPacketV1().
+			asBytes := []byte(`2["hello",{"playground":"world","wake":{"won":["too",3]}}]`)
+			asPacket := *NewPacketV1().
 				WithType(EventPacket.Byte()).
+				WithNamespace("/").
 				WithData([]interface{}{"hello", map[string]interface{}{
 					"playground": "world",
 					"wake": map[string]interface{}{
 						"won": []interface{}{"too", 3},
 					},
 				}}).(*PacketV1)
-			return data, want, nil
-		},
-	}
-
-	for name, testParams := range spec {
-		for suffix, run := range runWithOptions {
-			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)))
-		}
-	}
-}
-
-func TestWritePacketV1(t *testing.T) {
-	var opts = []func(*testing.T){runTest("")}
-
-	type (
-		testFn          func(*testing.T)
-		testParamsInFn  func(want []byte, pac PacketV1, xerr error) testFn
-		testParamsOutFn func(*testing.T) (want []byte, pac PacketV1, xerr error)
-	)
-
-	runWithOptions := map[string]testParamsInFn{
-		"Write": func(data []byte, want PacketV1, xerr error) testFn {
-			return func(t *testing.T) {
-				for _, opt := range opts {
-					opt(t)
-				}
-
-				var pac PacketV1
-				n, err := (&pac).Write(data)
-
-				assert.Equal(t, len(data), n, "the data length")
-				assert.ErrorIs(t, err, xerr)
-
-				assert.Equal(t, want.Type, pac.Type, "the packet type")
-				assert.Equal(t, want.Namespace, pac.Namespace, "the namespace:")
-				assert.Equal(t, want.AckID, pac.AckID, "the ackID")
-			}
-		},
-	}
-
-	spec := map[string]testParamsOutFn{
-		"CONNECT": func(*testing.T) ([]byte, PacketV1, error) {
-			data := []byte(`0`)
-			want := *NewPacketV1().WithNamespace("/").(*PacketV1)
-			return data, want, nil
-		},
-		"DISCONNECT": func(*testing.T) ([]byte, PacketV1, error) {
-			data := []byte(`1`)
-			want := *NewPacketV1().
-				WithType(DisconnectPacket.Byte()).
-				WithNamespace("/").(*PacketV1)
-			return data, want, nil
-		},
-		"EVENT": func(*testing.T) ([]byte, PacketV1, error) {
-			data := []byte(`2["hello",1]`)
-			want := *NewPacketV1().
-				WithType(EventPacket.Byte()).
-				WithNamespace("/").
-				WithData([]interface{}{"hello", 1.0}).(*PacketV1)
-			return data,
-				want, nil
-		},
-		"EVENT with AckID": func(*testing.T) ([]byte, PacketV1, error) {
-			data := []byte(`2/admin,456["project:delete",123]`)
-			want := *NewPacketV1().
-				WithType(EventPacket.Byte()).
-				WithNamespace("/admin").
-				WithData([]interface{}{"project:delete", 123.0}).
-				WithAckID(456).(*PacketV1)
-			return data, want, nil
-		},
-		"ACK": func(*testing.T) ([]byte, PacketV1, error) {
-			data := []byte(`3/admin,456[]`)
-			want := *NewPacketV1().
-				WithType(AckPacket.Byte()).
-				WithNamespace("/admin").
-				WithData([]interface{}{}).
-				WithAckID(456).(*PacketV1)
-			return data, want, nil
-		},
-		"ERROR": func(*testing.T) ([]byte, PacketV1, error) {
-			data := []byte(`4/admin,"Not authorized"`)
-			want := *NewPacketV1().
-				WithType(ErrorPacket.Byte()).
-				WithNamespace("/admin").
-				WithData(notAuthorized).(*PacketV1)
-			return data, want, nil
-		},
-
-		// extra
-		"EVENT with Binary": func(*testing.T) ([]byte, PacketV1, error) {
-			data := []byte(`2["unknown", {"base64":true,"data":"xAtiaW5hcnkgZGF0YQ=="}]`)
-			want := *NewPacketV1().
-				WithType(EventPacket.Byte()).
-				WithNamespace("/").
-				WithData([]interface{}{
-					"unknown",
-					map[string]interface{}{"base64": true, "data": "xAtiaW5hcnkgZGF0YQ=="},
-				}).(*PacketV1)
-			return data, want, nil
+			return asPacket, asBytes, nil
 		},
 	}
 

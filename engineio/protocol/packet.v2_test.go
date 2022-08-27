@@ -6,213 +6,233 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
 
+	itst "github.com/njones/socketio/internal/test"
 	"github.com/stretchr/testify/assert"
 )
 
-var testingName = strings.NewReplacer(" ", "_")
-
-func runTest(testNames ...string) func(*testing.T) {
-	return func(t *testing.T) {
-		t.Helper()
-
-		have := strings.SplitN(t.Name(), "/", 2)[1]
-		suffix := strings.Split(have, ".")[1]
-
-		for _, testName := range testNames {
-			if testName == "" || testName == "*" {
-				return
-			}
-
-			want := testingName.Replace(testName)
-			if !strings.Contains(want, ".") {
-				want += "." + suffix
-			}
-			if have == want {
-				return
-			}
-		}
-		t.SkipNow()
-	}
-}
-
-func TestReadPacketV2(t *testing.T) {
-	var opts = []func(*testing.T){}
+func TestPacketV2(t *testing.T) {
+	var opts = []func(*testing.T) bool{}
 
 	type (
 		testFn          func(*testing.T)
-		testParamsInFn  func(data string, want PacketV2, xerr error) testFn
-		testParamsOutFn func(*testing.T) (data string, want PacketV2, xerr error)
+		testParamsInFn  func(PacketV2, string, error) testFn
+		testParamsOutFn func(*testing.T) (PacketV2, string, error)
 	)
 
 	runWithOptions := map[string]testParamsInFn{
-		"Decode": func(data string, want PacketV2, xerr error) testFn {
+		"Decode": func(output PacketV2, input string, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					opt(t)
+					if !opt(t) {
+						return
+					}
 				}
+
+				t.Parallel()
 
 				var have PacketV2
-				var err = NewPacketDecoderV2(strings.NewReader(data)).Decode(&have)
+				var err = NewPacketDecoderV2(strings.NewReader(input)).Decode(&have)
 
-				assert.ErrorIs(t, err, xerr)
-				assert.Equal(t, want, have)
+				assert.ErrorIs(t, err, xErr)
+				assert.Equal(t, output, have)
 			}
 		},
-		"ReadPacket": func(data string, want PacketV2, xerr error) testFn {
+		"Encode": func(input PacketV2, output string, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					opt(t)
+					if !opt(t) {
+						return
+					}
 				}
 
-				var decoder _packetDecoderV2 = NewPacketDecoderV2
-
-				var have PacketV2
-				var err = decoder.From(strings.NewReader(data)).ReadPacket(&have)
-
-				assert.ErrorIs(t, err, xerr)
-				assert.Equal(t, want, have)
-			}
-		},
-	}
-
-	spec := map[string]testParamsOutFn{
-		"Open": func(*testing.T) (string, PacketV2, error) {
-			data := `0{"sid":"abc123","upgrades":[],"pingTimeout":300}`
-			want := PacketV2{Packet{T: OpenPacket, D: &HandshakeV2{SID: "abc123", Upgrades: []string{}, PingTimeout: Duration(300 * time.Millisecond)}}}
-			return data, want, nil
-		},
-		"Close": func(*testing.T) (string, PacketV2, error) {
-			data := `1`
-			want := PacketV2{Packet{T: ClosePacket, D: nil}}
-			return data, want, nil
-		},
-		"Ping": func(*testing.T) (string, PacketV2, error) {
-			data := `2`
-			want := PacketV2{Packet{T: PingPacket, D: nil}}
-			return data, want, nil
-		},
-		"Pong with Text": func(*testing.T) (string, PacketV2, error) {
-			data := `3probe`
-			want := PacketV2{Packet{T: PongPacket, D: "probe"}}
-			return data, want, nil
-		},
-		"Message": func(*testing.T) (string, PacketV2, error) {
-			data := `4HelloWorld`
-			want := PacketV2{Packet{T: MessagePacket, D: "HelloWorld"}}
-			return data, want, nil
-		},
-		"Upgrade": func(*testing.T) (string, PacketV2, error) {
-			data := `5`
-			want := PacketV2{Packet{T: UpgradePacket, D: nil}}
-			return data, want, nil
-		},
-		"NOOP": func(*testing.T) (string, PacketV2, error) {
-			data := `6`
-			want := PacketV2{Packet{T: NoopPacket, D: nil}}
-			return data, want, nil
-		},
-
-		// extra
-		"Open Err JSON": func(*testing.T) (string, PacketV2, error) {
-			data := `0{"sid":"abc1`
-			err := ErrHandshakeDecode.F("v2", io.ErrUnexpectedEOF)
-			return data, PacketV2{Packet{D: new(HandshakeV2)}}, err
-		},
-	}
-
-	for name, testParams := range spec {
-		for suffix, run := range runWithOptions {
-			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)))
-		}
-	}
-}
-
-func TestWritePacketV2(t *testing.T) {
-	var opts = []func(*testing.T){}
-
-	type (
-		testFn          func(*testing.T)
-		testParamsInFn  func(data PacketV2, want string, xerr error) testFn
-		testParamsOutFn func(*testing.T) (data PacketV2, want string, xerr error)
-	)
-
-	runWithOptions := map[string]testParamsInFn{
-		"Encode": func(data PacketV2, want string, xerr error) testFn {
-			return func(t *testing.T) {
-				for _, opt := range opts {
-					opt(t)
-				}
+				t.Parallel()
 
 				var have = new(bytes.Buffer)
-				var err = NewPacketEncoderV2(have).Encode(data)
+				var err = NewPacketEncoderV2(have).Encode(input)
 
-				assert.ErrorIs(t, err, xerr)
-				assert.Equal(t, want, have.String())
+				assert.ErrorIs(t, err, xErr)
+				assert.Equal(t, output, have.String())
 			}
 		},
-		"WritePacket": func(data PacketV2, want string, xerr error) testFn {
+		"ReadPacket": func(output PacketV2, input string, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					opt(t)
+					if !opt(t) {
+						return
+					}
 				}
+
+				t.Parallel()
+
+				var have PacketV2
+				var decoder _packetDecoderV2 = NewPacketDecoderV2
+				var err = decoder.From(strings.NewReader(input)).ReadPacket(&have)
+
+				assert.ErrorIs(t, err, xErr)
+				assert.Equal(t, output, have)
+			}
+		},
+		"WritePacket": func(input PacketV2, output string, xErr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					if !opt(t) {
+						return
+					}
+				}
+
+				t.Parallel()
 
 				var encoder _packetEncoderV2 = NewPacketEncoderV2
 
 				var have = new(bytes.Buffer)
-				var err = encoder.To(have).WritePacket(data)
+				var err = encoder.To(have).WritePacket(input)
 
-				assert.ErrorIs(t, err, xerr)
-				assert.Equal(t, want, have.String())
+				assert.ErrorIs(t, err, xErr)
+				assert.Equal(t, output, have.String())
+			}
+		},
+		"Short Decode": func(output PacketV2, input string, xErr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					if !opt(t) {
+						return
+					}
+				}
+
+				t.Parallel()
+
+				var have PacketV2
+				var reader = shortReader{r: strings.NewReader(input), max: 5, ran: *rand.New(rand.NewSource(5))}
+				var err = NewPacketDecoderV2(reader).Decode(&have)
+
+				assert.ErrorIs(t, err, xErr)
+				assert.Equal(t, output, have)
+			}
+		},
+		"Short Encode": func(input PacketV2, output string, xErr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					if !opt(t) {
+						return
+					}
+				}
+
+				t.Parallel()
+
+				var have = new(bytes.Buffer)
+				var writer = shortWriter{w: have, max: 5, ran: *rand.New(rand.NewSource(5))}
+				var err = NewPacketEncoderV2(writer).Encode(input)
+
+				assert.ErrorIs(t, err, xErr)
+				assert.Equal(t, output, have.String())
+			}
+		},
+		"Short ReadPacket": func(output PacketV2, input string, xErr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					if !opt(t) {
+						return
+					}
+				}
+
+				t.Parallel()
+
+				var have PacketV2
+				var reader = shortReader{r: strings.NewReader(input), max: 5, ran: *rand.New(rand.NewSource(10))}
+				var decoder _packetDecoderV2 = NewPacketDecoderV2
+				var err = decoder.From(reader).ReadPacket(&have)
+
+				assert.ErrorIs(t, err, xErr)
+				assert.Equal(t, output, have)
+			}
+		},
+		"Short WritePacket": func(input PacketV2, output string, xErr error) testFn {
+			return func(t *testing.T) {
+				for _, opt := range opts {
+					if !opt(t) {
+						return
+					}
+				}
+
+				t.Parallel()
+
+				var have = new(bytes.Buffer)
+				var writer = shortWriter{w: have, max: 5, ran: *rand.New(rand.NewSource(10))}
+				var encoder _packetEncoderV2 = NewPacketEncoderV2
+				var err = encoder.To(writer).WritePacket(input)
+
+				assert.ErrorIs(t, err, xErr)
+				assert.Equal(t, output, have.String())
 			}
 		},
 	}
 
 	spec := map[string]testParamsOutFn{
 		"Open": func(*testing.T) (PacketV2, string, error) {
-			want := `0{"sid":"abc123","upgrades":[],"pingTimeout":300}`
-			data := PacketV2{Packet{T: OpenPacket, D: &HandshakeV2{SID: "abc123", PingTimeout: Duration(300 * time.Millisecond)}}}
-			return data, want, nil
+			asString := `0{"sid":"abc123","upgrades":[],"pingTimeout":300}`
+			asPacket := PacketV2{Packet{T: OpenPacket, D: &HandshakeV2{SID: "abc123", Upgrades: []string{}, PingTimeout: Duration(300 * time.Millisecond)}}}
+			return asPacket, asString, nil
 		},
 		"Close": func(*testing.T) (PacketV2, string, error) {
-			want := `1`
-			data := PacketV2{Packet{T: ClosePacket, D: nil}}
-			return data, want, nil
+			asString := `1`
+			asPacket := PacketV2{Packet{T: ClosePacket, D: nil}}
+			return asPacket, asString, nil
 		},
 		"Ping": func(*testing.T) (PacketV2, string, error) {
-			want := `2`
-			data := PacketV2{Packet{T: PingPacket, D: nil}}
-			return data, want, nil
+			asString := `2`
+			asPacket := PacketV2{Packet{T: PingPacket, D: nil}}
+			return asPacket, asString, nil
 		},
 		"Pong with Text": func(*testing.T) (PacketV2, string, error) {
-			want := `3probe`
-			data := PacketV2{Packet{T: PongPacket, D: "probe"}}
-			return data, want, nil
+			asString := `3probe`
+			asPacket := PacketV2{Packet{T: PongPacket, D: "probe"}}
+			return asPacket, asString, nil
 		},
 		"Message": func(*testing.T) (PacketV2, string, error) {
-			want := `4HelloWorld`
-			data := PacketV2{Packet{T: MessagePacket, D: "HelloWorld"}}
-			return data, want, nil
+			asString := `4HelloWorld`
+			asPacket := PacketV2{Packet{T: MessagePacket, D: "HelloWorld"}}
+			return asPacket, asString, nil
 		},
 		"Upgrade": func(*testing.T) (PacketV2, string, error) {
-			want := `5`
-			data := PacketV2{Packet{T: UpgradePacket, D: nil}}
-			return data, want, nil
+			asString := `5`
+			asPacket := PacketV2{Packet{T: UpgradePacket, D: nil}}
+			return asPacket, asString, nil
 		},
 		"NOOP": func(*testing.T) (PacketV2, string, error) {
-			want := `6`
-			data := PacketV2{Packet{T: NoopPacket, D: nil}}
-			return data, want, nil
+			asString := `6`
+			asPacket := PacketV2{Packet{T: NoopPacket, D: nil}}
+			return asPacket, asString, nil
 		},
 
 		// extra
+		"Open Err JSON": func(*testing.T) (PacketV2, string, error) {
+			opts = append(opts, itst.DoNotTest(
+				"Encode",
+				"WritePacket",
+				"Short_Encode",
+				"Short_WritePacket",
+			))
+
+			asString := `0{"sid":"abc1`
+			err := ErrHandshakeDecode.F("v2", io.ErrUnexpectedEOF)
+			return PacketV2{}, asString, err
+		},
 		"Err PacketType": func(*testing.T) (PacketV2, string, error) {
-			data := PacketV2{Packet{T: 200, D: nil}}
+			opts = append(opts, itst.DoNotTest(
+				"Decode",
+				"ReadPacket",
+				"Short_Decode",
+				"Short_ReadPacket",
+			))
+
+			asPacket := PacketV2{Packet{T: 200, D: nil}}
 			err := ErrInvalidPacketType
-			return data, "", err
+			return asPacket, "", err
 		},
 	}
 
