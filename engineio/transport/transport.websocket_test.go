@@ -43,12 +43,6 @@ func TestWebsocketTransport(t *testing.T) {
 
 				assert.NoError(t, err)
 
-				ping, err := wsutil.ReadServerText(wsConn)
-				assert.NoError(t, err)
-
-				err = wsutil.WriteClientText(wsConn, append([]byte{'3'}, ping[1:]...))
-				assert.NoError(t, err)
-
 				for _, packet := range packets {
 					tr.Send(packet)
 				}
@@ -81,12 +75,6 @@ func TestWebsocketTransport(t *testing.T) {
 				wsConn, _, _, err := ws.Dial(context.TODO(), wsURL+"/engine.io")
 				wai.Done()
 
-				assert.NoError(t, err)
-
-				ping, err := wsutil.ReadServerText(wsConn)
-				assert.NoError(t, err)
-
-				err = wsutil.WriteClientText(wsConn, append([]byte{'3'}, ping[1:]...))
 				assert.NoError(t, err)
 
 				for _, msg := range messages {

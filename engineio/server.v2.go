@@ -192,12 +192,18 @@ func (v2 *serverV2) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		}
 	}
 
-	transport, _, err = v2.doUpgrade(v2.sessions.Get(sessionID))(w, r)
+	var isUpgrade bool
+	transport, isUpgrade, err = v2.doUpgrade(v2.sessions.Get(sessionID))(w, r)
 	if err != nil {
 		return nil, err
 	}
 
-	go func() { v2.transportRunError <- transport.Run(w, r, v2.eto...) }()
+	var opts []eiot.Option
+	if isUpgrade {
+		opts = []eiot.Option{eiot.WithIsUpgrade(isUpgrade)}
+	}
+
+	go func() { v2.transportRunError <- transport.Run(w, r, append(v2.eto, opts...)...) }()
 
 	return
 }

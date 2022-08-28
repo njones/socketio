@@ -20,8 +20,9 @@ type WebsocketTransport struct {
 	*Transport
 	conn *ws.Conn
 
-	origin  []string
-	PingMsg string
+	origin    []string
+	PingMsg   string
+	isUpgrade bool
 }
 
 func NewWebsocketTransport(chanBuf int) func(SessionID, Codec) Transporter {
@@ -67,9 +68,11 @@ func (t *WebsocketTransport) Run(w http.ResponseWriter, r *http.Request, opts ..
 		complete.Wait()
 	}
 
-	if err := t.probe(w, r.WithContext(ctx)); err != nil {
-		cancel()
-		return err
+	if t.isUpgrade {
+		if err := t.probe(w, r.WithContext(ctx)); err != nil {
+			cancel()
+			return err
+		}
 	}
 
 	grp, ctx := errgroup.WithContext(ctx)

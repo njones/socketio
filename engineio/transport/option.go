@@ -30,3 +30,12 @@ func WithPingInterval(dur time.Duration) Option {
 		}
 	}
 }
+
+func WithIsUpgrade(b bool) Option {
+	return func(t Transporter) {
+		switch v := t.(type) {
+		case *WebsocketTransport:
+			v.isUpgrade = b
+		}
+	}
+}

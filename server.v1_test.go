@@ -3,6 +3,7 @@ package socketio_test
 import (
 	"bytes"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -15,13 +16,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestServerStatus(t *testing.T) {
+	svr := socketio.NewServerV4()
+
+	req, err := http.NewRequest("GET", "/socket.io/?transport=polling", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+
+	svr.ServeHTTP(rec, req)
+
+	t.Error(rec.Result().StatusCode)
+}
+
 func TestServerV1(t *testing.T) {
-	var opts = []func(*testing.T){}
+	var opts = []func(*testing.T){runTest("sending to the client.Websocket")}
 	var EIOv = 2
 
 	runWithOptions := map[string]testParamsInFn{
 		"Polling": func(v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
 			return PollingTestV1(opts, EIOv, v1, count, seq, syncOn)
+		},
+		"Websocket": func(v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
+			return WebsocketTestV1(opts, EIOv, v1, count, seq, syncOn)
 		},
 	}
 
@@ -80,6 +98,84 @@ func PollingTestV1(opts []func(*testing.T), EIOv int, vX socketio.Server, count 
 				queryStr = q[i]
 			}
 			client[i].polling.connect(queryStr)
+		}
+
+		// wait for all onConnection events to complete...
+		syncOn.Wait()
+
+		var x int
+		reqSequence := []string{"send1", "grab1", "send2", "grab2"}
+		for _, reqType := range reqSequence {
+			if request, ok := seq[reqType]; ok && strings.HasPrefix(reqType, "send") {
+				var packetBuf = new(bytes.Buffer)
+
+				for i, packets := range request {
+					x++
+					if len(packets) == 0 {
+						continue
+					}
+
+					syncOn.Add(1)
+					packetBuf.Reset()
+
+					for _, packet := range packets {
+						packetBuf.WriteString(fmt.Sprintf("%d:%s", len(packet), packet))
+					}
+					client[i].polling.send(packetBuf)
+				}
+				continue
+			}
+			if request, ok := seq[reqType]; ok && strings.HasPrefix(reqType, "grab") {
+				for i, want := range request {
+					x++
+					have := client[i].polling.grab()
+					assert.Equal(t, want, have, "[%s] idx: %d", reqType, i)
+				}
+				continue
+			}
+		}
+
+		// wait for all emitted events to complete...
+		syncOn.Wait()
+
+		// check that we hit every "send/grab" that we needed to check...
+		if xq, ok := seq["connect_query"]; ok {
+			x += len(xq)
+		}
+		assert.Equal(t, count*len(seq), x)
+	}
+}
+
+func WebsocketTestV1(opts []func(*testing.T), EIOv int, vX socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) func(*testing.T) {
+	return func(t *testing.T) {
+		for _, opt := range opts {
+			opt(t)
+		}
+
+		t.Parallel()
+
+		var (
+			server = httptest.NewServer(vX)
+			client = make([]*testClient, count)
+		)
+
+		defer server.Close()
+
+		// send onConnect events (auto onConnect for v2)
+		for i := 0; i < count; i++ {
+			client[i] = &testClient{websocket: &v1WebsocketClient{
+				t:          t,
+				base:       server.URL,
+				client:     server.Client(),
+				buffer:     new(bytes.Buffer),
+				eioVersion: EIOv,
+			}}
+
+			var queryStr []string
+			if q, ok := seq["connect_query"]; ok {
+				queryStr = q[i]
+			}
+			client[i].websocket.connect(queryStr)
 		}
 
 		// wait for all onConnection events to complete...
