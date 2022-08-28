@@ -32,6 +32,10 @@ func (wtr *Writer) String(str string) wtrErr {
 	return wtr.Bytes([]byte(str))
 }
 
+func (wtr *Writer) Error() string {
+	return wtr.err.Error()
+}
+
 func (wtr *Writer) To(w io.WriterTo) wtrErr {
 	if wtr.err != nil {
 		return wtr

@@ -89,7 +89,7 @@ func TestPacketLength(t *testing.T) {
 			PingTimeout: Duration(5000 * time.Millisecond),
 		}}, len(`0{"sid":"The ID here","upgrades":[],"pingTimeout":5000}`)),
 		"Open with Handshake v3": values(Packet{T: OpenPacket, D: &HandshakeV3{
-			HandshakeV2: HandshakeV2{
+			HandshakeV2: &HandshakeV2{
 				SID:         "The ID here",
 				Upgrades:    []string{},
 				PingTimeout: Duration(5000 * time.Millisecond),

@@ -10,11 +10,9 @@ import (
 
 	eio "github.com/njones/socketio/engineio"
 	eios "github.com/njones/socketio/engineio/session"
+	itst "github.com/njones/socketio/internal/test"
 	"github.com/stretchr/testify/assert"
 )
-
-// CORS
-// XHR2
 
 type (
 	testFn          func(*testing.T)
@@ -22,12 +20,14 @@ type (
 	testParamsOutFn func(*testing.T) (eio.Server, []variables)
 )
 
+var runTest, skipTest = itst.RunTest, itst.SkipTest //lint:ignore U1000 Ignore unused function when testing
+
 func TestServerV2(t *testing.T) {
 	var opts = []func(*testing.T){}
 	var EIOv = 2
 
 	runWithOptions := map[string]testParamsInFn{
-		"Polling": func(v2 eio.Server, out []variables) testFn {
+		"Server": func(v2 eio.Server, out []variables) testFn {
 			return PollingTestV2(opts, EIOv, v2, out)
 		},
 	}
@@ -63,7 +63,7 @@ func PollingTestV2(opts []func(*testing.T), EIOv int, v2 eio.Server, out []varia
 			assert.NoError(t, err)
 
 			for k, v := range v.headers {
-				req.Header.Add(k, v)
+				req.Header.Add(k, fmt.Sprintf(v, server.URL))
 			}
 
 			resp, err := client.Do(req)
@@ -98,7 +98,7 @@ func BasicV2(t *testing.T) (a eio.Server, m []variables) {
 				assert.Greater(t, n, int64(0))
 				assert.NoError(t, err)
 
-				assert.Equal(t, `68:0{"sid":"Apple","upgrades":["websocket","hope"],"pingTimeout":60000}`, buf.String())
+				assert.Equal(t, `68:0{"sid":"Apple","upgrades":["hope","websocket"],"pingTimeout":60000}`, buf.String())
 			},
 		},
 	}
@@ -114,7 +114,7 @@ func CORSV2(t *testing.T) (a eio.Server, m []variables) {
 		{
 			method:  "GET",
 			url:     "%s/engine.io/?EIO=%d&transport=polling",
-			headers: map[string]string{"origin": "localhost"},
+			headers: map[string]string{"origin": "%s"},
 			resp: func(t *testing.T, resp *http.Response) {
 				var buf = new(bytes.Buffer)
 				n, err := buf.ReadFrom(resp.Body)

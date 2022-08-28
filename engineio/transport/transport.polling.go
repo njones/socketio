@@ -65,7 +65,8 @@ func (t *PollingTransport) Run(_w http.ResponseWriter, r *http.Request, opts ...
 		}
 	}()
 
-	ctx, cancel := context.WithCancel(r.Context())
+	ctx := r.Context()
+	ctx, cancel := context.WithCancel(ctx)
 	t.Transport.shutdown = func() { cancel() }
 
 	switch r.Method {
@@ -77,6 +78,42 @@ func (t *PollingTransport) Run(_w http.ResponseWriter, r *http.Request, opts ...
 	}
 	return nil
 
+}
+
+func (t *PollingTransport) Write(w http.ResponseWriter, r *http.Request) error {
+	var packets eiop.Payload
+	var buffer = &struct {
+		use bool
+		idx int
+	}{}
+
+Write:
+	for packet := range t.receive {
+		if packet.T == eiop.NoopPacket {
+			switch v := packet.D.(type) {
+			case WriteClose:
+				if !buffer.use {
+					buffer.idx = len(packets)
+				}
+				break Write
+			case StartWriteBuffer:
+				if v() {
+					buffer.use = true
+					buffer.idx = len(packets)
+					continue
+				}
+			}
+		}
+		packets = append(packets, packet)
+	}
+
+	if buffer.use {
+		for _, packet := range packets[buffer.idx:] {
+			t.receive <- packet
+		}
+	}
+
+	return t.codec.PayloadEncoder.To(w).WritePayload(packets[:buffer.idx])
 }
 
 // longPoll allows a connection for a specified amout of time... then releases a payload

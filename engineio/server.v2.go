@@ -12,8 +12,8 @@ package engineio
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -44,7 +44,7 @@ type serverV2 struct {
 
 	transportChanBuf int
 
-	initialPackets func(eiot.Transporter, *http.Request) []eiop.Packet
+	initialPackets func(eiot.Transporter, *http.Request)
 	generateID     func() SessionID
 
 	codec eiot.Codec
@@ -54,6 +54,8 @@ type serverV2 struct {
 	servers    map[EIOVersionStr]server
 	sessions   mapSessionToTransport
 	transports map[eiot.Name]func(SessionID, eiot.Codec) eiot.Transporter
+
+	transportRunError chan error
 }
 
 func NewServerV2(opts ...Option) Server { return (&serverV2{}).new(opts...) }
@@ -65,6 +67,7 @@ func (v2 *serverV2) new(opts ...Option) *serverV2 {
 	v2.upgradeTimeout = 10000 * time.Millisecond
 	v2.maxHttpBufferSize = 10e7
 	v2.transportChanBuf = 1000
+	v2.transportRunError = make(chan error, 1)
 
 	v2.eto = append(v2.eto, eiot.WithPingTimeout(v2.pingTimeout))
 
@@ -97,150 +100,140 @@ func (v2 *serverV2) With(svr Server, opts ...Option) {
 	}
 }
 
+func (v2 *serverV2) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	_, err := v2.ServeTransport(w, r)
+	if err != nil {
+		goto HandleError
+	}
+	err = <-v2.transportRunError
+
+HandleError:
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrBadRequestMethod):
+			return
+		}
+		return
+	}
+}
+
 func (v2 *serverV2) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot.Transporter, error) {
 	if v2.path == nil || !strings.HasPrefix(r.URL.Path, *v2.path) {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return nil, ErrURIPath
 	}
 
-	eioVersion := eioVersionFrom(r)
-	v, ok := v2.servers[eioVersion]
-	if !ok {
-		return nil, fmt.Errorf("bad server")
+	switch r.Method {
+	case http.MethodGet, http.MethodOptions:
+		break
+	case http.MethodPost:
+		if sessionIDFrom(r) != "" {
+			break
+		}
+		fallthrough
+	default:
+		return nil, ErrBadRequestMethod
 	}
 
-	transport, err := v.serveTransport(w, r)
+	eioVersion := eioVersionFrom(r)
+	server, ok := v2.servers[eioVersion]
+	if !ok || eioVersion == "" {
+		return nil, ErrNoEIOVersion
+	}
+
+	transportName := transportNameFrom(r)
+	if _, ok := v2.transports[transportName]; !ok || transportName == "" {
+		return nil, ErrNoTransport
+	}
+
+	transport, err := server.serveTransport(w, r)
 	if err != nil {
 		return nil, err
-	}
-
-	go func() {
-		transport.Run(w, r, v2.eto...) // skip this error
-	}()
-
-	return transport, nil
-}
-
-func (v2 *serverV2) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if v2.path == nil || !strings.HasPrefix(r.URL.Path, *v2.path) {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
-	eioVersion := eioVersionFrom(r)
-	if v, ok := v2.servers[eioVersion]; ok {
-		if transport, err := v.serveTransport(w, r); err != nil {
-			if errors.Is(err, EOH) {
-				return
-			}
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		} else if err = transport.Run(w, r); err != nil {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		}
-
-		return
-	}
-
-	http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-}
-
-func (v2 *serverV2) serveTransport(w http.ResponseWriter, r *http.Request) (eiot.Transporter, error) {
-	if origin := r.Header.Get("Origin"); origin != "" {
-		// Automatically add a CORS header
-		if strings.EqualFold(origin, r.URL.Host) {
-			w.Header().Set("Access-Control-Allow-Origin", r.URL.Host)
-		}
-	}
-	if strings.ToUpper(r.Method) == "OPTIONS" {
-		return nil, nil
-	}
-
-	sessionID := sessionIDFrom(r)
-
-	if sessionID == "" {
-		return v2.initHandshake(w, r)
-	}
-
-	toTransport := transportNameFrom(r)
-
-	transport, err := v2.sessions.Get(sessionID)
-	if err != nil {
-		return transport, err
-	}
-
-	if v2.allowUpgrades {
-		if tPort, ok := v2.doUpgrade(transport, toTransport); ok {
-			transport.Shutdown() // the previous transport should stop, now overwrite it...
-			transport = tPort    // no shadowing, we want to replace the transport...
-		}
 	}
 
 	return transport, err
 }
 
-func (v2 *serverV2) initHandshake(w http.ResponseWriter, r *http.Request) (eiot.Transporter, error) {
-	sessionID := v2.generateID()
-	transportName := transportNameFrom(r)
+func ToEOH(err error) error {
+	if err == nil {
+		return EOH
+	}
+	return err
+}
 
-	handshakePacket := eiop.Packet{
+func (v2 *serverV2) serveTransport(w http.ResponseWriter, r *http.Request) (transport eiot.Transporter, err error) {
+	if origin := r.Header.Get("Origin"); origin != "" {
+		if strings.EqualFold(origin, r.URL.Hostname()) {
+			w.Header().Set("Access-Control-Allow-Origin", r.URL.Host)
+		}
+	}
+	if strings.ToUpper(r.Method) == "OPTIONS" {
+		return nil, IOR
+	}
+
+	sessionID := sessionIDFrom(r)
+	if sessionID == "" {
+		sessionID = v2.generateID()
+		transportName := transportNameFrom(r)
+		transport = v2.transports[transportName](sessionID, v2.codec)
+		if err := v2.sessions.Set(transport); err != nil {
+			return nil, err
+		}
+
+		transport.Send(v2.handshakePacket(sessionID, transportName))
+		if v2.initialPackets != nil {
+			v2.initialPackets(transport, r)
+		}
+
+		if t, ok := transport.(interface {
+			Write(http.ResponseWriter, *http.Request) error
+		}); ok {
+			transport.Send(eiop.Packet{T: eiop.NoopPacket, D: eiot.WriteClose{}})
+			return transport, ToEOH(t.Write(w, r))
+		}
+	}
+
+	transport, _, err = v2.doUpgrade(v2.sessions.Get(sessionID))(w, r)
+	if err != nil {
+		return nil, err
+	}
+
+	go func() { v2.transportRunError <- transport.Run(w, r, v2.eto...) }()
+
+	return
+}
+
+func (v2 *serverV2) handshakePacket(sessionID SessionID, transportName eiot.Name) eiop.Packet {
+	return eiop.Packet{
 		T: eiop.OpenPacket,
 		D: &eiop.HandshakeV2{
 			SID:         sessionID.String(),
-			Upgrades:    v2.upgradeable(transportName, v2.transports),
+			Upgrades:    v2.upgrades(transportName, v2.transports),
 			PingTimeout: eiop.Duration(v2.pingTimeout),
 		},
 	}
-
-	transportFunc, ok := v2.transports[transportName]
-	if !ok {
-		return nil, ErrNoTransport
-	}
-
-	transport := transportFunc(sessionID, v2.codec)
-	v2.sessions.Set(transport)
-
-	packets := []eiop.Packet{handshakePacket}
-	if v2.initialPackets != nil {
-		packets = append(packets, v2.initialPackets(transport, r)...)
-	}
-
-	if err := v2.codec.PayloadEncoder.To(w).WritePayload(eiop.Payload(packets)); err != nil {
-		return nil, ErrPayloadEncode.F(err)
-	}
-
-	if v2.cookie.name != "" {
-		cookie := http.Cookie{
-			Name:     v2.cookie.name,
-			Value:    sessionID.String(),
-			Path:     v2.cookie.path,
-			HttpOnly: v2.cookie.httpOnly,
-			SameSite: v2.cookie.sameSite,
-		}
-		r.AddCookie(&cookie)
-	}
-
-	// End Of Handshake
-	return transport, EOH
 }
 
-func (v2 *serverV2) doUpgrade(t eiot.Transporter /*id SessionID, from,*/, to eiot.Name) (eiot.Transporter, bool) {
-	id := t.ID()
-	from := t.Name()
-
-	if to == from {
-		return nil, false
-	}
-
-	for _, val := range v2.upgradeable(from, v2.transports) {
-		if string(to) == val {
-			return v2.transports[to](id, v2.codec), true
+func (v2 *serverV2) doUpgrade(transport eiot.Transporter, err error) func(http.ResponseWriter, *http.Request) (eiot.Transporter, bool, error) {
+	var isUpgrade bool
+	return func(w http.ResponseWriter, r *http.Request) (eiot.Transporter, bool, error) {
+		if err != nil {
+			return transport, isUpgrade, err
 		}
+		sessionID, from, to := transport.ID(), transport.Name(), transportNameFrom(r)
+		if to != from {
+			for _, val := range v2.upgrades(from, v2.transports) {
+				if string(to) == val {
+					transport = v2.transports[to](sessionID, v2.codec)
+					isUpgrade = true
+					return transport, isUpgrade, v2.sessions.Set(transport)
+				}
+			}
+		}
+		return transport, isUpgrade, err
 	}
-
-	return nil, false
 }
 
-func (v2 *serverV2) upgradeable(name eiot.Name, tps map[eiot.Name]func(SessionID, eiot.Codec) eiot.Transporter) []string {
+func (v2 *serverV2) upgrades(name eiot.Name, tps map[eiot.Name]func(SessionID, eiot.Codec) eiot.Transporter) []string {
 	if v2.allowUpgrades {
 		switch name {
 		case "polling":
@@ -251,6 +244,7 @@ func (v2 *serverV2) upgradeable(name eiot.Name, tps map[eiot.Name]func(SessionID
 				}
 				rtn = append(rtn, string(key))
 			}
+			sort.Strings(rtn)
 			return rtn
 		}
 	}

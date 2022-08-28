@@ -14,6 +14,12 @@ type Name string
 
 func (name Name) String() string { return string(name) }
 
+type WaitGroup interface {
+	Add(int)
+	Done()
+	Wait()
+}
+
 type Codec struct {
 	eiop.PacketEncoder
 	eiop.PacketDecoder
@@ -31,6 +37,8 @@ type Transporter interface {
 
 	Shutdown()
 }
+
+type StartWriteBuffer func() bool
 
 type Transport struct {
 	id    SessionID

@@ -6,6 +6,7 @@ package protocol
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -34,6 +35,13 @@ func (dec *PacketDecoderV4) Decode(packet *PacketV4) error {
 	}
 
 	switch packet.T {
+	case OpenPacket:
+		var data HandshakeV4
+		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data).OnErrF(ErrHandshakeDecode, "v4", dec.read.Err())
+		if dec.read.IsNotErr() {
+			packet.D = &data
+		}
+		return dec.read.Err()
 	case BinaryPacket:
 		var data = new(bytes.Buffer)
 		dec.read.SetDecoder(_packetBase64Decoder(base64.NewDecoder)).Decode(data).OnErrF(ErrPacketDecode, "v4", dec.read.Err())
@@ -59,6 +67,19 @@ var NewPacketEncoderV4 _packetEncoderV4 = func(w io.Writer) *PacketEncoderV4 {
 
 func (enc *PacketEncoderV4) Encode(packet PacketV4) (err error) {
 	switch packet.T {
+
+	case OpenPacket:
+		switch data := packet.D.(type) {
+		case *HandshakeV4:
+			if data.Upgrades == nil {
+				data.Upgrades = []string{}
+			}
+			enc.write.Bytes(packet.T.Bytes()).OnErr(ErrPacketEncode)
+			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrHandshakeEncode, "v4", enc.write.Err())
+		default:
+			return ErrInvalidHandshake.F("v4")
+		}
+		return enc.write.Err()
 	case BinaryPacket:
 		enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v4", enc.write.Err())
 		switch data := packet.D.(type) {

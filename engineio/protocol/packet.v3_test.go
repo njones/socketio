@@ -96,7 +96,7 @@ func TestPacketV3(t *testing.T) {
 					Packet: Packet{
 						T: OpenPacket,
 						D: &HandshakeV3{
-							HandshakeV2:  HandshakeV2{SID: "abc123", Upgrades: []string{}, PingTimeout: Duration(300 * time.Millisecond)},
+							HandshakeV2:  &HandshakeV2{SID: "abc123", Upgrades: []string{}, PingTimeout: Duration(300 * time.Millisecond)},
 							PingInterval: Duration(5000 * time.Millisecond),
 						},
 					},

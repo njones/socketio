@@ -18,10 +18,9 @@ const serverSetupComplete ctky = "server_setup_complete"
 
 type WebsocketTransport struct {
 	*Transport
+	conn *ws.Conn
 
-	origin []string
-
-	conn    *ws.Conn
+	origin  []string
 	PingMsg string
 }
 
@@ -64,7 +63,7 @@ func (t *WebsocketTransport) Run(w http.ResponseWriter, r *http.Request, opts ..
 	// A context value can be passed in to allow the a server to be setup before the
 	// probe is attempted, this is good for testing. If the context key is not here
 	// then nothing happens and it's skipped.
-	if complete := ctx.Value(serverSetupComplete).(*sync.WaitGroup); complete != nil {
+	if complete, ok := ctx.Value(serverSetupComplete).(*sync.WaitGroup); ok && complete != nil {
 		complete.Wait()
 	}
 

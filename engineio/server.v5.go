@@ -3,6 +3,11 @@
 
 package engineio
 
+import (
+	eiop "github.com/njones/socketio/engineio/protocol"
+	eiot "github.com/njones/socketio/engineio/transport"
+)
+
 const Version5 EIOVersionStr = "5"
 
 func init() { registry[Version5.Int()] = NewServerV5 }
@@ -49,6 +54,15 @@ func NewServerV5(opts ...Option) Server { return (&serverV5{}).new(opts...) }
 
 func (v5 *serverV5) new(opts ...Option) *serverV5 {
 	v5.serverV4 = (&serverV4{}).new(opts...)
+
+	v5.codec = eiot.Codec{
+		PacketEncoder:  eiop.NewPacketEncoderV4,
+		PacketDecoder:  eiop.NewPacketDecoderV4,
+		PayloadEncoder: eiop.NewPayloadEncoderV4,
+		PayloadDecoder: eiop.NewPayloadDecoderV4,
+	}
+
+	v5.servers[Version5] = v5
 
 	v5.With(v5, opts...)
 	return v5
