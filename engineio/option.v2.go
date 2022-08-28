@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	eiop "github.com/njones/socketio/engineio/protocol"
 	eiot "github.com/njones/socketio/engineio/transport"
 )
 
@@ -31,10 +30,13 @@ func WithPath(path string) Option {
 
 func WithPingTimeout(d time.Duration) Option {
 	return func(svr Server) {
+	ServerCheck:
 		switch v := svr.(type) {
 		case *serverV2:
 			v.pingTimeout = d
-			v.eto = append(v.eto, eiot.WithPingTimeout(d))
+		case interface{ prev() Server }:
+			svr = v.prev()
+			goto ServerCheck
 		}
 	}
 }
@@ -95,7 +97,7 @@ func WithTransport(name eiot.Name, tr func(SessionID, eiot.Codec) eiot.Transport
 	}
 }
 
-func WithInitialPackets(fn func(eiot.Transporter, *http.Request) []eiop.Packet) Option {
+func WithInitialPackets(fn func(eiot.Transporter, *http.Request)) Option {
 	return func(svr Server) {
 	ServerCheck: // makes things an O(2^n) check...
 		switch v := svr.(type) {

@@ -2,16 +2,17 @@ package engineio
 
 import (
 	"time"
-
-	eiot "github.com/njones/socketio/engineio/transport"
 )
 
 func WithPingInterval(d time.Duration) Option {
 	return func(svr Server) {
+	ServerCheck:
 		switch v := svr.(type) {
 		case *serverV3:
 			v.pingInterval = d
-			v.eto = append(v.eto, eiot.WithPingInterval(d))
+		case interface{ prev() Server }:
+			svr = v.prev()
+			goto ServerCheck
 		}
 	}
 }

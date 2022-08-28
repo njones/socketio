@@ -10,12 +10,12 @@ import (
 	siot "github.com/njones/socketio/transport"
 )
 
-func autoConnect(v1 *ServerV1, newPacket siop.NewPacket) func(transport eiot.Transporter, r *http.Request) []eiop.Packet {
-	return func(transport eiot.Transporter, r *http.Request) []eiop.Packet {
+func autoConnect(v1 *ServerV1, newPacket siop.NewPacket) func(transport eiot.Transporter, r *http.Request) {
+	return func(transport eiot.Transporter, r *http.Request) {
 		socketID, err := v1.tr().Add(transport)
 		if err != nil {
 			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
-			return nil
+			return
 		}
 
 		socket := siot.Socket{
@@ -23,15 +23,15 @@ func autoConnect(v1 *ServerV1, newPacket siop.NewPacket) func(transport eiot.Tra
 			Namespace: "/",
 		}
 
-		if err := v1.doConnectPacket(socketID, socket, sioRequest(r)); err != nil {
-			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
-			return nil
-		}
-
 		sioPacket := newPacket().WithType(siop.ConnectPacket.Byte())
 		eioPacket := eiop.Packet{T: eiop.MessagePacket, D: sioPacket}
+		transport.Send(eioPacket)
+		transport.Send(eiop.Packet{T: eiop.NoopPacket, D: eiot.StartWriteBuffer(func() bool { return true })})
 
-		return []eiop.Packet{eioPacket}
+		if err := v1.doConnectPacket(socketID, socket, sioRequest(r)); err != nil {
+			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
+			return
+		}
 	}
 }
 

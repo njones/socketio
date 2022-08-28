@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var runTest = itst.RunTest
+var runTest, skipTest = itst.RunTest, itst.SkipTest //lint:ignore U1000 Ignore unused function when testing
 
 func TestPollingTransport(t *testing.T) {
 	var opts = []func(*testing.T){}

@@ -3,6 +3,7 @@ package socketio
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -119,9 +120,16 @@ func (v1 *ServerV1) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := v1.serveHTTP(w, r.WithContext(ctx)); err != nil {
-		if errors.Is(err, eio.EOH) {
+		switch {
+		case errors.Is(err, eio.EOH):
+			return
+		case errors.Is(err, eio.ErrNoEIOVersion),
+			errors.Is(err, eio.ErrNoTransport),
+			errors.Is(err, eio.ErrBadRequestMethod):
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
+		log.Println(">>>>>>>", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -89,19 +89,22 @@ func TestPacketV4(t *testing.T) {
 
 	spec := map[string]testParamsOutFn{
 		"Open": func(*testing.T) (PacketV4, string, bool, error) {
-			isString := `0{"sid":"abc123","upgrades":[],"pingTimeout":300,"pingInterval":5000}`
+			isString := `0{"sid":"abc123","upgrades":[],"pingTimeout":300,"pingInterval":5000,"maxPayload":10000}`
 			isPacket := PacketV4{
 				PacketV3: PacketV3{
 					PacketV2: PacketV2{
 						Packet: Packet{
 							T: OpenPacket,
-							D: &HandshakeV3{
-								HandshakeV2: HandshakeV2{
-									SID:         "abc123",
-									Upgrades:    []string{},
-									PingTimeout: Duration(300 * time.Millisecond),
+							D: &HandshakeV4{
+								HandshakeV3: &HandshakeV3{
+									HandshakeV2: &HandshakeV2{
+										SID:         "abc123",
+										Upgrades:    []string{},
+										PingTimeout: Duration(300 * time.Millisecond),
+									},
+									PingInterval: Duration(5000 * time.Millisecond),
 								},
-								PingInterval: Duration(5000 * time.Millisecond),
+								MaxPayload: 10000,
 							},
 						},
 					},

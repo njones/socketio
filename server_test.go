@@ -27,7 +27,7 @@ type (
 	testParamsOutFn func(*testing.T) (sio.Server, int, map[string][][]string, *sync.WaitGroup)
 )
 
-var runTest, skipTest = itst.RunTest, itst.SkipTest
+var runTest, skipTest = itst.RunTest, itst.SkipTest //lint:ignore U1000 Ignore unused function when testing
 var testingQuickPoll = eio.WithTransport("polling", eiot.NewPollingTransport(1000, 5*time.Millisecond))
 
 func checkCount(t *testing.T, count int) {

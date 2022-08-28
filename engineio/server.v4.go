@@ -4,6 +4,9 @@
 package engineio
 
 import (
+	"net/http"
+	"strings"
+
 	eiop "github.com/njones/socketio/engineio/protocol"
 	eiot "github.com/njones/socketio/engineio/transport"
 )
@@ -18,7 +21,8 @@ func init() { registry[Version4.Int()] = NewServerV4 }
 type serverV4 struct {
 	*serverV3
 
-	UseEIO3 bool
+	UseEIO3    bool
+	maxPayload int
 }
 
 func NewServerV4(opts ...Option) Server { return (&serverV4{}).new(opts...) }
@@ -35,8 +39,58 @@ func (v4 *serverV4) new(opts ...Option) *serverV4 {
 		PayloadDecoder: eiop.NewPayloadDecoderV4,
 	}
 
+	v4.servers[Version4] = v4
+
 	v4.With(v4, opts...)
 	return v4
 }
 
 func (v4 *serverV4) prev() Server { return v4.serverV3 }
+
+func (v4 *serverV4) serveTransport(w http.ResponseWriter, r *http.Request) (transport eiot.Transporter, err error) {
+	if origin := r.Header.Get("Origin"); origin != "" {
+		if strings.EqualFold(origin, r.URL.Hostname()) {
+			w.Header().Set("Access-Control-Allow-Origin", r.URL.Host)
+		}
+	}
+	if strings.ToUpper(r.Method) == "OPTIONS" {
+		return nil, IOR
+	}
+
+	sessionID := sessionIDFrom(r)
+	if sessionID == "" {
+		sessionID = v4.generateID()
+		transportName := transportNameFrom(r)
+		transport = v4.transports[transportName](sessionID, v4.codec)
+		if err := v4.sessions.Set(transport); err != nil {
+			return nil, err
+		}
+
+		transport.Send(v4.handshakePacket(sessionID, transportName))
+		if v4.initialPackets != nil {
+			v4.initialPackets(transport, r)
+		}
+
+		if t, ok := transport.(interface {
+			Write(http.ResponseWriter, *http.Request) error
+		}); ok {
+			transport.Send(eiop.Packet{T: eiop.NoopPacket, D: eiot.WriteClose{}})
+			return transport, ToEOH(t.Write(w, r))
+		}
+	}
+
+	transport, _, err = v4.doUpgrade(v4.sessions.Get(sessionID))(w, r)
+	if err != nil {
+		return nil, err
+	}
+
+	go func() { v4.transportRunError <- transport.Run(w, r, v4.eto...) }()
+
+	return
+}
+
+func (v4 *serverV4) handshakePacket(sessionID SessionID, transportName eiot.Name) eiop.Packet {
+	packet := v4.serverV3.handshakePacket(sessionID, transportName)
+	packet.D = &eiop.HandshakeV4{HandshakeV3: packet.D.(*eiop.HandshakeV3), MaxPayload: v4.maxPayload}
+	return packet
+}

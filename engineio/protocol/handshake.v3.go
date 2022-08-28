@@ -9,7 +9,7 @@ import (
 )
 
 type HandshakeV3 struct {
-	HandshakeV2
+	*HandshakeV2
 	PingInterval Duration `json:"pingInterval"`
 }
 

@@ -80,29 +80,29 @@ func (enc *PacketEncoderV2) Encode(packet PacketV2) (err error) {
 			if data.Upgrades == nil {
 				data.Upgrades = []string{}
 			}
-			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrHandshakeEncode, "v2", enc.write.Err())
-			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrHandshakeEncode, "v2", enc.write.Err())
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrHandshakeEncode, "v2", enc.write)
+			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrHandshakeEncode, "v2", enc.write)
 		default:
 			return ErrInvalidHandshake.F("v2")
 		}
 	case MessagePacket, PingPacket, PongPacket:
 		switch data := packet.D.(type) {
 		case nil:
-			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
 		case string:
-			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
-			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
+			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write)
 		case []byte:
-			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
 			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
 		case io.WriterTo:
-			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
 			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
 		default:
 			return ErrInvalidPacketData.F(fmt.Sprintf("unexpected data type of: %T", data))
 		}
 	case ClosePacket, UpgradePacket, NoopPacket:
-		enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+		enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
 	default:
 		return ErrInvalidPacketType.F(fmt.Sprintf("unexpected packet type of: %s", packet.T))
 	}

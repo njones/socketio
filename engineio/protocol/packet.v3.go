@@ -75,7 +75,7 @@ func (enc *PacketEncoderV3) Encode(packet PacketV3) (err error) {
 				data.Upgrades = []string{}
 			}
 			enc.write.Bytes(packet.T.Bytes()).OnErr(ErrPacketEncode)
-			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrHandshakeEncode, "v3", enc.write.Err())
+			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrHandshakeEncode, "v3", enc.write)
 		default:
 			return ErrInvalidHandshake.F("v3")
 		}
