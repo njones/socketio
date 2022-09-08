@@ -301,6 +301,8 @@ func withPacketData(v interface{}) packetData {
 		return newPacketDataObject(withObjectMap(val))
 	case io.ReadWriter:
 		return val
+	case error:
+		return readWriteErr{val}
 	default:
 		return readWriteErr{ErrInvalidPacketType.F(val)}
 	}

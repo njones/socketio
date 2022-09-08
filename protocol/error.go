@@ -86,3 +86,6 @@ func (rw readWriteErr) Read([]byte) (int, error) { return 0, rw.error }
 
 // Write takes the internal error and passes it back to the caller
 func (rw readWriteErr) Write([]byte) (int, error) { return 0, rw.error }
+
+func (rw readWriteErr) Error() string { return rw.error.Error() }
+func (rw readWriteErr) Unwrap() error { return rw.error }

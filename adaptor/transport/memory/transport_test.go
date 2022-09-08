@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	tmap "github.com/njones/socketio/adaptor/transport/memory"
 	eiop "github.com/njones/socketio/engineio/protocol"
@@ -97,7 +96,7 @@ func TestMapTransport(t *testing.T) {
 				PayloadDecoder: eiop.NewPayloadDecoderV2,
 			}
 
-			eTransporter := eiot.NewPollingTransport(1000, 10*time.Millisecond)(tmap.SessionID("12345"), codec)
+			eTransporter := eiot.NewPollingTransport(1000)(tmap.SessionID("12345"), codec) // 10*time.Millisecond
 			sTransporter := tmap.NewInMemoryTransport(siop.NewPacketV2)
 
 			return data, packetData, eTransporter, sTransporter

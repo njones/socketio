@@ -28,25 +28,27 @@ func doConnectPacketV4(v4 *ServerV4) func(SocketID, siot.Socket, *Request) error
 func runV4(v4 *ServerV4) func(SocketID, *Request) error {
 	return func(socketID SocketID, req *Request) error {
 		for socket := range v4.tr().Receive(socketID) {
-			doV4(v4, socketID, socket, req)
+			if err := doV4(v4, socketID, socket, req); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
 }
 
-func doV4(v4 *ServerV4, socketID SocketID, socket siot.Socket, req *Request) {
+func doV4(v4 *ServerV4, socketID SocketID, socket siot.Socket, req *Request) error {
 	v1 := v4.prev.prev.prev
 
 	switch socket.Type {
 	case siop.ConnectPacket.Byte():
 		if err := v1.doConnectPacket(socketID, socket, req); err != nil {
 			v4.tr().Send(socketID, serviceError(err), siop.WithType(byte(siop.ConnectErrorPacket)))
-			return
+			return nil
 		}
 		connectResponse := map[string]interface{}{"sid": socketID.String()}
 		v4.tr().Send(socketID, connectResponse, siop.WithType(siop.ConnectPacket.Byte()), siop.WithNamespace(socket.Namespace))
 		v4.tr().(rawTransport).Transport(socketID).SendBuffer()
-		return
+		return nil
 	}
-	doV3(v4.prev, socketID, socket, req)
+	return doV3(v4.prev, socketID, socket, req)
 }

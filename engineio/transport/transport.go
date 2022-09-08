@@ -2,7 +2,6 @@ package transport
 
 import (
 	"net/http"
-	"time"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
 	eios "github.com/njones/socketio/engineio/session"
@@ -45,8 +44,7 @@ type Transport struct {
 	name  Name
 	codec Codec
 
-	pingTimeout  time.Duration
-	pingInterval time.Duration
+	sendPing bool
 
 	send, receive chan eiop.Packet
 	onErr         chan error

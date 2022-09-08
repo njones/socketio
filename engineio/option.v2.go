@@ -79,14 +79,23 @@ func WithTransportChannelBuffer(n int) Option {
 	}
 }
 
-var clearTransports = new(sync.Once)
+func WithTransportOption(opts ...eiot.Option) Option {
+	return func(svr Server) {
+		switch v := svr.(type) {
+		case *serverV2:
+			v.eto = append(v.eto, opts...)
+		}
+	}
+}
+
+var clearTransport = new(sync.Once)
 
 func WithTransport(name eiot.Name, tr func(SessionID, eiot.Codec) eiot.Transporter) Option {
 	return func(svr Server) {
 	ServerCheck: // makes things an O(2^n) check...
 		switch v := svr.(type) {
 		case *serverV2:
-			clearTransports.Do(func() {
+			clearTransport.Do(func() {
 				v.transports = make(map[eiot.Name]func(SessionID, eiot.Codec) eiot.Transporter)
 			})
 			v.transports[name] = tr
@@ -106,6 +115,15 @@ func WithInitialPackets(fn func(eiot.Transporter, *http.Request)) Option {
 		case interface{ prev() Server }:
 			svr = v.prev()
 			goto ServerCheck
+		}
+	}
+}
+
+func WithSessionShave(d time.Duration) Option {
+	return func(svr Server) {
+		switch v := svr.(type) {
+		case *serverV2:
+			v.sessions.(*sessions).shave = d
 		}
 	}
 }

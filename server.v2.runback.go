@@ -51,19 +51,21 @@ func doBinaryEventPacket(v2 *ServerV2) func(SocketID, siot.Socket) error {
 func runV2(v2 *ServerV2) func(SocketID, *Request) error {
 	return func(socketID SocketID, req *Request) error {
 		for socket := range v2.tr().Receive(socketID) {
-			doV2(v2, socketID, socket, req)
+			if err := doV2(v2, socketID, socket, req); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
 }
 
-func doV2(v2 *ServerV2, socketID SocketID, socket siot.Socket, req *Request) {
+func doV2(v2 *ServerV2, socketID SocketID, socket siot.Socket, req *Request) error {
 	switch socket.Type {
 	case siop.BinaryEventPacket.Byte():
 		if err := v2.doBinaryEventPacket(socketID, socket); err != nil {
 			v2.tr().Send(socketID, serviceError(err), siop.WithType(byte(siop.ErrorPacket)))
 		}
-		return
+		return nil
 	}
-	doV1(v2.prev, socketID, socket, req)
+	return doV1(v2.prev, socketID, socket, req)
 }

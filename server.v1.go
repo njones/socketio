@@ -3,12 +3,12 @@ package socketio
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 
 	nmem "github.com/njones/socketio/adaptor/transport/memory"
 	eio "github.com/njones/socketio/engineio"
+	eiot "github.com/njones/socketio/engineio/transport"
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
 )
@@ -121,15 +121,19 @@ func (v1 *ServerV1) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if err := v1.serveHTTP(w, r.WithContext(ctx)); err != nil {
 		switch {
-		case errors.Is(err, eio.EOH):
+		case
+			errors.Is(err, eiot.ErrTimeoutSocket),
+			errors.Is(err, eiot.ErrCloseSocket),
+			errors.Is(err, eio.EOH):
 			return
-		case errors.Is(err, eio.ErrNoEIOVersion),
+		case
+			errors.Is(err, eio.ErrNoSessionID),
+			errors.Is(err, eio.ErrNoEIOVersion),
 			errors.Is(err, eio.ErrNoTransport),
 			errors.Is(err, eio.ErrBadRequestMethod):
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		log.Println(">>>>>>>", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

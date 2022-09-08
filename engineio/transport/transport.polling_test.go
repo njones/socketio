@@ -5,7 +5,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
 	itst "github.com/njones/socketio/internal/test"
@@ -30,7 +29,7 @@ func TestPollingTransport(t *testing.T) {
 					opt(t)
 				}
 
-				tr := NewPollingTransport(1000, 10*time.Millisecond)(SessionID("12345"), codec)
+				tr := NewPollingTransport(1000)(SessionID("12345"), codec) // , 10*time.Millisecond
 
 				for _, packet := range packets {
 					tr.Send(packet)
@@ -54,7 +53,7 @@ func TestPollingTransport(t *testing.T) {
 					opt(t)
 				}
 
-				tr := NewPollingTransport(1000, 10*time.Millisecond)(SessionID("12345"), codec)
+				tr := NewPollingTransport(1000)(SessionID("12345"), codec) // , 10*time.Millisecond
 
 				r := httptest.NewRequest("POST", "http://example.com", strings.NewReader(message))
 				w := httptest.NewRecorder()
@@ -150,7 +149,7 @@ func TestPollingJSONPTransport(t *testing.T) {
 					opt(t)
 				}
 
-				tr := NewPollingTransport(1000, 10*time.Millisecond)(SessionID("12345"), codec)
+				tr := NewPollingTransport(1000)(SessionID("12345"), codec) // , 10*time.Millisecond
 
 				for _, packet := range packets {
 					tr.Send(packet)

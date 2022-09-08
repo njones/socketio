@@ -94,10 +94,10 @@ func (enc *PacketEncoderV2) Encode(packet PacketV2) (err error) {
 			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write)
 		case []byte:
 			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
-			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write)
 		case io.WriterTo:
 			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
-			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write.Err())
+			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write)
 		default:
 			return ErrInvalidPacketData.F(fmt.Sprintf("unexpected data type of: %T", data))
 		}
