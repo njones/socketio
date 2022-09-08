@@ -97,7 +97,14 @@ func (c *lifecycle) WithTimeout(ctx context.Context, d time.Duration) context.Co
 			return x.Done()
 		}
 
-		return context.WithValue(ctx, eios.SessionTimeoutKey, timeout)
+		x = context.WithValue(x, eios.SessionExtendTimeoutKey, eios.ExtendTimeoutFunc(func() {
+			if val, ok := c.t.Load(sessionID); ok {
+				val.(*time.Timer).Stop()
+				val.(*time.Timer).Reset((c.td + c.id) - c.shave)
+			}
+		}))
+
+		return context.WithValue(x, eios.SessionTimeoutKey, timeout)
 	}
 
 	c.t.Store(sessionID, time.NewTimer((c.td+c.id)-c.shave))
@@ -108,6 +115,13 @@ func (c *lifecycle) WithTimeout(ctx context.Context, d time.Duration) context.Co
 	var timeout eios.TimeoutChannel = func() <-chan struct{} {
 		return x.Done()
 	}
+
+	x = context.WithValue(x, eios.SessionExtendTimeoutKey, eios.ExtendTimeoutFunc(func() {
+		if val, ok := c.t.Load(sessionID); ok {
+			val.(*time.Timer).Stop()
+			val.(*time.Timer).Reset((c.td + c.id) - c.shave)
+		}
+	}))
 	return context.WithValue(x, eios.SessionTimeoutKey, timeout)
 }
 
