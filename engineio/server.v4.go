@@ -103,6 +103,7 @@ func (v4 *serverV4) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		opts = []eiot.Option{eiot.WithIsUpgrade(isUpgrade)}
 	}
 
+	ctx = v4.sessions.WithCancel(ctx)
 	ctx = v4.sessions.WithInterval(ctx, v4.pingInterval)
 	ctx = v4.sessions.WithTimeout(ctx, v4.pingTimeout)
 

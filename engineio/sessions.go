@@ -13,6 +13,7 @@ type mapSessions interface {
 	Set(eiot.Transporter) error
 	Get(SessionID) (eiot.Transporter, error)
 
+	WithCancel(ctx context.Context) context.Context
 	WithTimeout(ctx context.Context, d time.Duration) context.Context
 	WithInterval(ctx context.Context, d time.Duration) context.Context
 }
@@ -75,6 +76,43 @@ type lifecycle struct {
 	removeTransport func(SessionID)
 }
 
+func (c *lifecycle) WithCancel(ctx context.Context) context.Context {
+	sessionID, ok := ctx.Value(ctxSessionID).(SessionID)
+	if !ok {
+		// there is no session to attach the timer to
+		return ctx
+	}
+
+	var chanPrefix = "chan:done:"
+	c.cancel.LoadOrStore(sessionID.PrefixID(chanPrefix), make(chan func(), 1))
+
+	ctx = context.WithValue(ctx, eios.SessionCancelChannelKey, func() <-chan func() {
+		if ch, ok := c.cancel.Load(sessionID.PrefixID(chanPrefix)); ok {
+			return ch.(chan func())
+		}
+		return nil
+	})
+
+	// Cancel will wait for another connections to close before closing this connection.
+	// As of now this requires all of the sessions to be on a single server, by using
+	// sticky sessions, otherwise this may not work as expected.
+	ctx = context.WithValue(ctx, eios.SessionCancelFunctionKey, func() {
+		if fn, ok := c.cancel.Load(sessionID.PrefixID(chanPrefix)); ok {
+			syn := new(sync.WaitGroup)
+			syn.Add(1)
+			fn.(chan func()) <- func() { syn.Done() }
+			close(fn.(chan func()))
+			syn.Wait()
+			c.removeSession(sessionID)
+			if c.removeTransport != nil {
+				c.removeTransport(sessionID)
+			}
+			c.cancel.Delete(sessionID.PrefixID(chanPrefix))
+		}
+	})
+	return ctx
+}
+
 func (c *lifecycle) WithTimeout(ctx context.Context, d time.Duration) context.Context {
 	if d <= 0 {
 		return ctx
@@ -90,28 +128,14 @@ func (c *lifecycle) WithTimeout(ctx context.Context, d time.Duration) context.Co
 	if val, ok := c.t.Load(sessionID); ok {
 		val.(*time.Timer).Stop()
 		val.(*time.Timer).Reset((c.td + c.id) - c.shave)
-
-		x, cancel := context.WithCancel(ctx)
-		c.cancel.Store(sessionID, func() { cancel() })
-		var timeout eios.TimeoutChannel = func() <-chan struct{} {
-			return x.Done()
-		}
-
-		x = context.WithValue(x, eios.SessionExtendTimeoutKey, eios.ExtendTimeoutFunc(func() {
-			if val, ok := c.t.Load(sessionID); ok {
-				val.(*time.Timer).Stop()
-				val.(*time.Timer).Reset((c.td + c.id) - c.shave)
-			}
-		}))
-
-		return context.WithValue(x, eios.SessionTimeoutKey, timeout)
+	} else {
+		c.t.Store(sessionID, time.NewTimer((c.td+c.id)-c.shave))
+		c.setTimeout(sessionID, time.Now())
 	}
-
-	c.t.Store(sessionID, time.NewTimer((c.td+c.id)-c.shave))
 
 	x, cancel := context.WithCancel(ctx)
 	c.cancel.Store(sessionID, func() { cancel() })
-	c.setTimeout(sessionID, time.Now())
+
 	var timeout eios.TimeoutChannel = func() <-chan struct{} {
 		return x.Done()
 	}
@@ -122,6 +146,7 @@ func (c *lifecycle) WithTimeout(ctx context.Context, d time.Duration) context.Co
 			val.(*time.Timer).Reset((c.td + c.id) - c.shave)
 		}
 	}))
+
 	return context.WithValue(x, eios.SessionTimeoutKey, timeout)
 }
 
@@ -137,17 +162,6 @@ func (c *lifecycle) WithInterval(ctx context.Context, d time.Duration) context.C
 	}
 
 	c.id = d
-	if val, ok := c.i.Load(sessionID); ok {
-		t := val.(*time.Ticker)
-		t.Reset(c.id)
-
-		var ticker eios.IntervalChannel = func() <-chan time.Time {
-			val, _ := c.i.Load(sessionID)
-			val.(*time.Ticker).Reset(c.id)
-			return val.(*time.Ticker).C
-		}
-		return context.WithValue(ctx, eios.SessionIntervalKey, ticker)
-	}
 
 	if val, ok := c.t.Load(sessionID); ok {
 		timer := val.(*time.Timer)
@@ -155,14 +169,16 @@ func (c *lifecycle) WithInterval(ctx context.Context, d time.Duration) context.C
 		timer.Reset((c.td + c.id) - c.shave)
 	}
 
-	c.i.Store(sessionID, time.NewTicker(c.id))
-	val, _ := c.i.Load(sessionID)
-	val.(*time.Ticker).Stop()
+	if val, ok := c.i.LoadOrStore(sessionID, time.NewTicker(c.id)); !ok {
+		val.(*time.Ticker).Reset(c.id)
+	}
 
 	var interval eios.IntervalChannel = func() <-chan time.Time {
-		val, _ := c.i.Load(sessionID)
-		val.(*time.Ticker).Reset(c.id)
-		return val.(*time.Ticker).C
+		if val, ok := c.i.Load(sessionID); ok {
+			val.(*time.Ticker).Reset(c.id)
+			return val.(*time.Ticker).C
+		}
+		return nil
 	}
 
 	return context.WithValue(ctx, eios.SessionIntervalKey, interval)
@@ -180,6 +196,7 @@ func (c *lifecycle) setTimeout(sessionID SessionID, start time.Time) {
 		if c.removeTransport != nil {
 			c.removeTransport(sessionID)
 		}
+		c.cancel.Delete(sessionID)
 	}()
 }
 

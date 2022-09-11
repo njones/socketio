@@ -5,11 +5,15 @@ import "time"
 type sessionCtxKey string
 
 const (
-	SessionExtendTimeoutKey sessionCtxKey = "extendTimeout"
-	SessionTimeoutKey       sessionCtxKey = "timeout"
-	SessionIntervalKey      sessionCtxKey = "interval"
+	SessionTimeoutKey        sessionCtxKey = "timeout"
+	SessionIntervalKey       sessionCtxKey = "interval"
+	SessionExtendTimeoutKey  sessionCtxKey = "timeout-extend"
+	SessionCancelChannelKey  sessionCtxKey = "cancel-channel"
+	SessionCancelFunctionKey sessionCtxKey = "cancel-function"
 )
 
-type ExtendTimeoutFunc func()
-type TimeoutChannel func() <-chan struct{}
-type IntervalChannel func() <-chan time.Time
+type (
+	TimeoutChannel    func() <-chan struct{}
+	IntervalChannel   func() <-chan time.Time
+	ExtendTimeoutFunc func()
+)
