@@ -86,7 +86,7 @@ func (c *lifecycle) WithCancel(ctx context.Context) context.Context {
 	var chanPrefix = "chan:done:"
 	c.cancel.LoadOrStore(sessionID.PrefixID(chanPrefix), make(chan func(), 1))
 
-	ctx = context.WithValue(ctx, eios.SessionCancelChannelKey, func() <-chan func() {
+	ctx = context.WithValue(ctx, eios.SessionCloseChannelKey, func() <-chan func() {
 		if ch, ok := c.cancel.Load(sessionID.PrefixID(chanPrefix)); ok {
 			return ch.(chan func())
 		}
@@ -96,19 +96,22 @@ func (c *lifecycle) WithCancel(ctx context.Context) context.Context {
 	// Cancel will wait for another connections to close before closing this connection.
 	// As of now this requires all of the sessions to be on a single server, by using
 	// sticky sessions, otherwise this may not work as expected.
-	ctx = context.WithValue(ctx, eios.SessionCancelFunctionKey, func() {
+	ctx = context.WithValue(ctx, eios.SessionCloseFunctionKey, func() func() {
 		if fn, ok := c.cancel.Load(sessionID.PrefixID(chanPrefix)); ok {
 			syn := new(sync.WaitGroup)
 			syn.Add(1)
 			fn.(chan func()) <- func() { syn.Done() }
 			close(fn.(chan func()))
 			syn.Wait()
-			c.removeSession(sessionID)
-			if c.removeTransport != nil {
-				c.removeTransport(sessionID)
+			return func() {
+				c.removeSession(sessionID)
+				if c.removeTransport != nil {
+					c.removeTransport(sessionID)
+				}
+				c.cancel.Delete(sessionID.PrefixID(chanPrefix))
 			}
-			c.cancel.Delete(sessionID.PrefixID(chanPrefix))
 		}
+		return nil
 	})
 	return ctx
 }

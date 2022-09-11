@@ -113,7 +113,7 @@ func (t *PollingTransport) poll(w http.ResponseWriter, r *http.Request) (err err
 	if fn, ok := ctx.Value(eios.SessionTimeoutKey).(eios.TimeoutChannel); ok {
 		timeout = fn()
 	}
-	if fn, ok := ctx.Value(eios.SessionCancelChannelKey).(func() <-chan func()); ok {
+	if fn, ok := ctx.Value(eios.SessionCloseChannelKey).(func() <-chan func()); ok {
 		cancel = fn()
 	}
 
@@ -184,8 +184,10 @@ Read:
 	for _, packet := range payload {
 		switch packet.T {
 		case eiop.ClosePacket:
-			if done, ok := r.Context().Value(eios.SessionCancelFunctionKey).(func()); ok {
-				done()
+			if done, ok := r.Context().Value(eios.SessionCloseFunctionKey).(func() func()); ok {
+				if cleanup := done(); cleanup != nil {
+					cleanup()
+				}
 			}
 			break Read
 		case eiop.PongPacket:

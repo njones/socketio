@@ -5,11 +5,11 @@ import "time"
 type sessionCtxKey string
 
 const (
-	SessionTimeoutKey        sessionCtxKey = "timeout"
-	SessionIntervalKey       sessionCtxKey = "interval"
-	SessionExtendTimeoutKey  sessionCtxKey = "timeout-extend"
-	SessionCancelChannelKey  sessionCtxKey = "cancel-channel"
-	SessionCancelFunctionKey sessionCtxKey = "cancel-function"
+	SessionTimeoutKey       sessionCtxKey = "timeout"
+	SessionIntervalKey      sessionCtxKey = "interval"
+	SessionExtendTimeoutKey sessionCtxKey = "timeout-extend"
+	SessionCloseChannelKey  sessionCtxKey = "cancel-channel"
+	SessionCloseFunctionKey sessionCtxKey = "cancel-function"
 )
 
 type (

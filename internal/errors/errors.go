@@ -7,6 +7,8 @@ import (
 )
 
 type (
+	HTTPErrorString string
+
 	String string
 	Struct struct {
 		e, rr error
@@ -15,6 +17,16 @@ type (
 		kv    []interface{}
 	}
 )
+
+func (e HTTPErrorString) As(v interface{}) bool {
+	if str, ok := v.(string); ok {
+		return strings.HasPrefix(string(e), str)
+	}
+	return false
+}
+func (e HTTPErrorString) Error() string               { return string(e) }
+func (e HTTPErrorString) F(v ...interface{}) Struct   { return String(e).F(v...) }
+func (e HTTPErrorString) KV(kv ...interface{}) Struct { return String(e).KV(kv...) }
 
 func (e String) Error() string { return string(e) }
 
@@ -69,6 +81,11 @@ func (e Struct) KV(kv ...interface{}) Struct {
 }
 
 func (e Struct) Is(target error) bool {
+	if fn, ok := e.e.(interface{ Is(error) bool }); ok {
+		if ok := fn.Is(target); ok {
+			return true
+		}
+	}
 	if eStruct, ok := target.(Struct); ok {
 		return e.e.Error() == eStruct.e.Error()
 	}
