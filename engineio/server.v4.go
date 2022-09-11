@@ -21,8 +21,8 @@ func init() { registry[Version4.Int()] = NewServerV4 }
 type serverV4 struct {
 	*serverV3
 
-	UseEIO3    bool
 	maxPayload int
+	UseEIO3    bool
 }
 
 func NewServerV4(opts ...Option) Server { return (&serverV4{}).new(opts...) }
@@ -30,6 +30,7 @@ func NewServerV4(opts ...Option) Server { return (&serverV4{}).new(opts...) }
 func (v4 *serverV4) new(opts ...Option) *serverV4 {
 	v4.serverV3 = (&serverV3{}).new(opts...)
 
+	v4.maxPayload = 100000
 	v4.maxHttpBufferSize = 1e7
 
 	v4.codec = eiot.Codec{
@@ -79,12 +80,18 @@ func (v4 *serverV4) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		}
 	}
 
-	transport, _, err = v4.doUpgrade(v4.sessions.Get(sessionID))(w, r)
+	var isUpgrade bool
+	transport, isUpgrade, err = v4.doUpgrade(v4.sessions.Get(sessionID))(w, r)
 	if err != nil {
 		return nil, err
 	}
 
-	go func() { v4.transportRunError <- transport.Run(w, r, v4.eto...) }()
+	var opts []eiot.Option
+	if isUpgrade {
+		opts = []eiot.Option{eiot.WithIsUpgrade(isUpgrade)}
+	}
+
+	go func() { v4.transportRunError <- transport.Run(w, r, append(v4.eto, opts...)...) }()
 
 	return
 }
