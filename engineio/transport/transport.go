@@ -47,7 +47,6 @@ type Transport struct {
 	sendPing bool
 
 	send, receive chan eiop.Packet
-	onErr         chan error
 
 	shutdown func()
 }

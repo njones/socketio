@@ -54,18 +54,14 @@ func (t *WebsocketTransport) Run(w http.ResponseWriter, r *http.Request, opts ..
 		opt(t)
 	}
 
-	ctx, cancel := context.WithCancel(r.Context())
-
-	t.conn, err = ws.Accept(w, r.WithContext(ctx), &ws.AcceptOptions{
+	t.conn, err = ws.Accept(w, r, &ws.AcceptOptions{
 		OriginPatterns: t.origin,
 	})
 	if err != nil {
-		cancel()
 		return err
 	}
 
-	t.Transport.shutdown = func() { t.conn.Close(ws.StatusNormalClosure, "shutdown"); cancel() }
-
+	ctx := r.Context()
 	// A context value can be passed in to allow the a server to be setup before the
 	// probe is attempted, this is good for testing. If the context key is not here
 	// then nothing happens and it's skipped.
@@ -74,8 +70,7 @@ func (t *WebsocketTransport) Run(w http.ResponseWriter, r *http.Request, opts ..
 	}
 
 	if t.isUpgrade {
-		if err := t.probe(w, r.WithContext(ctx)); err != nil {
-			cancel()
+		if err := t.probe(w, r); err != nil {
 			return err
 		}
 	}
@@ -132,18 +127,29 @@ func (t *WebsocketTransport) probe(w http.ResponseWriter, r *http.Request) error
 }
 
 func (t *WebsocketTransport) incoming(ctx context.Context) (err error) {
-	var interval, timeout = make(<-chan time.Time), make(<-chan struct{})
+	var interval, timeout, cancel = make(<-chan time.Time), make(<-chan struct{}), make(<-chan func())
 	if fn, ok := ctx.Value(eios.SessionIntervalKey).(eios.IntervalChannel); ok {
 		interval = fn()
 	}
 	if fn, ok := ctx.Value(eios.SessionTimeoutKey).(eios.TimeoutChannel); ok {
 		timeout = fn()
 	}
+	if fn, ok := ctx.Value(eios.SessionCancelChannelKey).(func() <-chan func()); ok {
+		cancel = fn()
+	}
 
+	var done func()
+
+Write:
 	for {
 		select {
+		case stop := <-cancel:
+			if stop != nil {
+				done = stop
+			}
+			break Write
 		case <-timeout:
-			t.Transport.shutdown()
+			break Write
 		case <-interval:
 			cw, err := t.conn.Writer(ctx, ws.MessageText)
 			if err != nil {
@@ -153,9 +159,6 @@ func (t *WebsocketTransport) incoming(ctx context.Context) (err error) {
 				return err
 			}
 			cw.Close()
-		case <-ctx.Done():
-			t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{ErrTimeoutSocket}}
-			return nil
 		case packet := <-t.receive:
 			if packet.T == eiop.BinaryPacket {
 				cw, err := t.conn.Writer(ctx, ws.MessageBinary)
@@ -178,6 +181,19 @@ func (t *WebsocketTransport) incoming(ctx context.Context) (err error) {
 			}
 		}
 	}
+
+	select {
+	case stop := <-cancel:
+		if stop != nil {
+			done = stop
+		}
+		if done != nil {
+			defer done()
+		}
+	default:
+		return nil
+	}
+	return nil
 }
 
 func (t *WebsocketTransport) outgoing(r *http.Request) error {
@@ -213,6 +229,9 @@ func (t *WebsocketTransport) outgoing(r *http.Request) error {
 
 		switch packet.T {
 		case eiop.ClosePacket:
+			if done, ok := r.Context().Value(eios.SessionCancelFunctionKey).(func()); ok {
+				done()
+			}
 			t.conn.CloseRead(ctx)
 			t.conn.Close(ws.StatusNormalClosure, "cross origin WebSocket accepted")
 			return nil

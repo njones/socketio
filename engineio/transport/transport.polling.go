@@ -2,8 +2,6 @@ package transport
 
 import (
 	"compress/gzip"
-	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,33 +49,17 @@ func NewPollingTransport(chanBuf int) func(SessionID, Codec) Transporter {
 
 func (t *PollingTransport) InnerTransport() *Transport { return t.Transport }
 
-func (t *PollingTransport) Run(_w http.ResponseWriter, r *http.Request, opts ...Option) (err error) {
+func (t *PollingTransport) Run(w http.ResponseWriter, r *http.Request, opts ...Option) (err error) {
 	for _, opt := range opts {
 		opt(t)
 	}
 
-	w := &writer{ResponseWriter: _w}
-	defer func() {
-		if errors.Is(err, http.ErrBodyReadAfterClose) && !w.DataWritten() {
-			err = nil
-		}
-
-		if err != nil {
-			t.onErr <- err
-		}
-	}()
-
-	ctx := r.Context()
-	ctx, cancel := context.WithCancel(ctx)
-
-	t.Transport.shutdown = func() { cancel() }
-
 	switch r.Method {
 	case http.MethodGet:
-		return t.compress(jsonp(t.poll))(w, r.WithContext(ctx))
+		return t.compress(jsonp(t.poll))(w, r)
 	case http.MethodPost:
 		// decompression will happen automatically
-		return t.emit(w, r.WithContext(ctx))
+		return t.emit(w, r)
 	}
 	return nil
 
@@ -120,9 +102,10 @@ Write:
 }
 
 // longPoll allows a connection for a specified amout of time... then releases a payload
-func (t *PollingTransport) poll(w http.ResponseWriter, r *http.Request) error {
+func (t *PollingTransport) poll(w http.ResponseWriter, r *http.Request) (err error) {
+
 	var ctx = r.Context()
-	var interval, timeout = make(<-chan time.Time), make(<-chan struct{})
+	var interval, timeout, cancel = make(<-chan time.Time), make(<-chan struct{}), make(<-chan func())
 
 	if fn, ok := ctx.Value(eios.SessionIntervalKey).(eios.IntervalChannel); ok {
 		interval = fn()
@@ -130,7 +113,11 @@ func (t *PollingTransport) poll(w http.ResponseWriter, r *http.Request) error {
 	if fn, ok := ctx.Value(eios.SessionTimeoutKey).(eios.TimeoutChannel); ok {
 		timeout = fn()
 	}
+	if fn, ok := ctx.Value(eios.SessionCancelChannelKey).(func() <-chan func()); ok {
+		cancel = fn()
+	}
 
+	var done func()
 	var packets eiop.Payload
 
 Write:
@@ -138,6 +125,11 @@ Write:
 		select {
 		case packet := <-t.receive:
 			packets = append(packets, packet)
+		case stop := <-cancel:
+			if stop != nil {
+				done = stop
+			}
+			break Write
 		case <-timeout:
 			break Write
 		case <-interval:
@@ -149,9 +141,6 @@ Write:
 				packets = append(packets, eiop.Packet{T: eiop.PingPacket, D: nil})
 			}
 			break Write
-		case <-ctx.Done():
-			t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{ErrTimeoutSocket}}
-			return nil
 		default:
 			time.Sleep(t.sleep) // let other things come in if things are coming quick...
 			if len(packets) > 0 && len(t.receive) == 0 {
@@ -160,15 +149,26 @@ Write:
 		}
 	}
 
-	if len(packets) > 0 {
-		if err := t.codec.PayloadEncoder.To(w).WritePayload(packets); err != nil {
-			t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{err}}
-			return ErrTransportEncode.F("polling", err)
+	select {
+	case stop := <-cancel:
+		if stop != nil {
+			done = stop
+		}
+		err = t.codec.PacketEncoder.To(w).WritePacket(eiop.Packet{T: eiop.NoopPacket})
+		if done != nil {
+			defer done()
+		}
+	default:
+		if len(packets) > 0 {
+			if err := t.codec.PayloadEncoder.To(w).WritePayload(packets); err != nil {
+				t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{err}}
+				return ErrTransportEncode.F("polling", err)
+			}
 		}
 	}
 
 	t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{ErrCloseSocket}} // shutdown the HTTP connection
-	return nil
+	return err
 }
 
 // gather pulls in all of the posts
@@ -180,8 +180,14 @@ func (t *PollingTransport) emit(w http.ResponseWriter, r *http.Request) error {
 		return ErrTransportDecode.F("polling", err)
 	}
 
+Read:
 	for _, packet := range payload {
 		switch packet.T {
+		case eiop.ClosePacket:
+			if done, ok := r.Context().Value(eios.SessionCancelFunctionKey).(func()); ok {
+				done()
+			}
+			break Read
 		case eiop.PongPacket:
 			t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{ErrCloseSocket}}
 			return nil
