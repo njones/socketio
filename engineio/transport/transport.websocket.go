@@ -22,9 +22,10 @@ type WebsocketTransport struct {
 	*Transport
 	conn *ws.Conn
 
-	origin    []string
-	PingMsg   string
-	isUpgrade bool
+	origin      []string
+	PingMsg     string
+	isInitProbe bool
+	fnOnUpgrade func() error
 }
 
 func NewWebsocketTransport(chanBuf int) func(SessionID, Codec) Transporter {
@@ -69,7 +70,7 @@ func (t *WebsocketTransport) Run(w http.ResponseWriter, r *http.Request, opts ..
 		complete.Wait()
 	}
 
-	if t.isUpgrade {
+	if t.isInitProbe {
 		if err := t.probe(w, r); err != nil {
 			return err
 		}
@@ -134,7 +135,7 @@ func (t *WebsocketTransport) incoming(ctx context.Context) (err error) {
 	if fn, ok := ctx.Value(eios.SessionTimeoutKey).(eios.TimeoutChannel); ok {
 		timeout = fn()
 	}
-	if fn, ok := ctx.Value(eios.SessionCancelChannelKey).(func() <-chan func()); ok {
+	if fn, ok := ctx.Value(eios.SessionCloseChannelKey).(func() <-chan func()); ok {
 		cancel = fn()
 	}
 
@@ -229,8 +230,10 @@ func (t *WebsocketTransport) outgoing(r *http.Request) error {
 
 		switch packet.T {
 		case eiop.ClosePacket:
-			if done, ok := r.Context().Value(eios.SessionCancelFunctionKey).(func()); ok {
-				done()
+			if done, ok := r.Context().Value(eios.SessionCloseFunctionKey).(func() func()); ok {
+				if cleanup := done(); cleanup != nil {
+					cleanup()
+				}
 			}
 			t.conn.CloseRead(ctx)
 			t.conn.Close(ws.StatusNormalClosure, "cross origin WebSocket accepted")
@@ -251,6 +254,15 @@ func (t *WebsocketTransport) outgoing(r *http.Request) error {
 		case eiop.MessagePacket:
 			t.send <- packet
 		case eiop.UpgradePacket:
+			if done, ok := r.Context().Value(eios.SessionCloseFunctionKey).(func() func()); ok {
+				_ = done() // skip cleanup...
+				if t.fnOnUpgrade != nil {
+					if err := t.fnOnUpgrade(); err != nil {
+						return err
+					}
+				}
+			}
+
 		}
 	}
 }

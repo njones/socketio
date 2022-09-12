@@ -103,15 +103,19 @@ func (v3 *serverV3) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		}
 	}
 
-	var isUpgrade bool
-	transport, isUpgrade, err = v3.doUpgrade(v3.sessions.Get(sessionID))(w, r)
+	var isProbeOnInit bool
+	var fnOnUpgrade func() error
+	transport, isProbeOnInit, fnOnUpgrade, err = v3.doUpgrade(v3.sessions.Get(sessionID))(w, r)
 	if err != nil {
 		return nil, err
 	}
 
 	var opts []eiot.Option
-	if isUpgrade {
-		opts = []eiot.Option{eiot.WithIsUpgrade(isUpgrade)}
+	if isProbeOnInit {
+		opts = []eiot.Option{eiot.OnInitProbe(isProbeOnInit)}
+	}
+	if fnOnUpgrade != nil {
+		opts = []eiot.Option{eiot.OnUpgrade(fnOnUpgrade)}
 	}
 
 	ctx = v3.sessions.WithInterval(ctx, v3.pingInterval)

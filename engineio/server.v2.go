@@ -204,15 +204,19 @@ func (v2 *serverV2) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		}
 	}
 
-	var isUpgrade bool
-	transport, isUpgrade, err = v2.doUpgrade(v2.sessions.Get(sessionID))(w, r)
+	var isProbeOnInit bool
+	var fnOnUpgrade func() error
+	transport, isProbeOnInit, fnOnUpgrade, err = v2.doUpgrade(v2.sessions.Get(sessionID))(w, r)
 	if err != nil {
 		return nil, err
 	}
 
 	var opts []eiot.Option
-	if isUpgrade {
-		opts = []eiot.Option{eiot.WithIsUpgrade(isUpgrade)}
+	if isProbeOnInit {
+		opts = []eiot.Option{eiot.OnInitProbe(isProbeOnInit)}
+	}
+	if fnOnUpgrade != nil {
+		opts = []eiot.Option{eiot.OnUpgrade(fnOnUpgrade)}
 	}
 
 	ctx = v2.sessions.WithTimeout(ctx, v2.pingTimeout*4)
@@ -235,11 +239,11 @@ func (v2 *serverV2) handshakePacket(sessionID SessionID, transportName Transport
 	}
 }
 
-func (v2 *serverV2) doUpgrade(transport eiot.Transporter, err error) func(http.ResponseWriter, *http.Request) (eiot.Transporter, bool, error) {
+func (v2 *serverV2) doUpgrade(transport eiot.Transporter, err error) func(http.ResponseWriter, *http.Request) (eiot.Transporter, bool, func() error, error) {
 	var isUpgrade bool
-	return func(w http.ResponseWriter, r *http.Request) (eiot.Transporter, bool, error) {
+	return func(w http.ResponseWriter, r *http.Request) (eiot.Transporter, bool, func() error, error) {
 		if err != nil {
-			return transport, isUpgrade, err
+			return transport, isUpgrade, nil, err
 		}
 		sessionID, from, to := transport.ID(), transport.Name(), transportNameFrom(r)
 		if to != from {
@@ -247,11 +251,12 @@ func (v2 *serverV2) doUpgrade(transport eiot.Transporter, err error) func(http.R
 				if string(to) == val {
 					transport = v2.transports[to](sessionID, v2.codec)
 					isUpgrade = true
-					return transport, isUpgrade, v2.sessions.Set(transport)
+					return transport, isUpgrade, func() error { return v2.sessions.Set(transport) }, nil
 				}
 			}
+			return nil, false, nil, ErrBadUpgrade
 		}
-		return transport, isUpgrade, err
+		return transport, isUpgrade, nil, err
 	}
 }
 

@@ -127,6 +127,7 @@ func (v1 *ServerV1) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, eio.EOH):
 			return
 		case
+			errors.Is(err, eio.HTTPStatusError400),
 			errors.Is(err, eio.ErrNoSessionID),
 			errors.Is(err, eio.ErrNoEIOVersion),
 			errors.Is(err, eio.ErrNoTransport),
