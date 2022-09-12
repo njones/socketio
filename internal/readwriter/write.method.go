@@ -1,6 +1,7 @@
 package readwriter
 
 import (
+	"bufio"
 	"io"
 
 	errs "github.com/njones/socketio/internal/errors"
@@ -52,6 +53,15 @@ func (wtr *Writer) Copy(src io.Reader) wtrErr {
 
 	_, wtr.err = io.Copy(wtr.w, src)
 	return onWtrErr{wtr}
+}
+
+func (wtr *Writer) Multi(ww ...io.Writer) *Writer {
+	if wtr.err != nil {
+		return wtr
+	}
+
+	wtr.w = bufio.NewWriter(io.MultiWriter(append([]io.Writer{wtr.w}, ww...)...))
+	return wtr
 }
 
 type onWtrErr struct{ *Writer }

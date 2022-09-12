@@ -12,6 +12,7 @@ import (
 	"time"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
+	eios "github.com/njones/socketio/engineio/session"
 	"golang.org/x/text/transform"
 )
 
@@ -20,34 +21,35 @@ type handlerWithError func(http.ResponseWriter, *http.Request) error
 type PollingTransport struct {
 	*Transport
 
-	interval time.Duration
-	sleep    time.Duration
+	sleep time.Duration
 
 	compress func(handlerWithError) handlerWithError
 }
 
-func NewPollingTransport(chanBuf int, ival time.Duration) func(SessionID, Codec) Transporter {
+func NewPollingTransport(chanBuf int) func(SessionID, Codec) Transporter {
 	return func(id SessionID, codec Codec) Transporter {
 		t := &PollingTransport{
 			Transport: &Transport{
-				id:      id,
-				name:    "polling",
-				codec:   codec,
-				send:    make(chan eiop.Packet, chanBuf),
-				receive: make(chan eiop.Packet, chanBuf),
+				id:       id,
+				name:     "polling",
+				codec:    codec,
+				send:     make(chan eiop.Packet, chanBuf),
+				receive:  make(chan eiop.Packet, chanBuf),
+				sendPing: true,
 			},
 			compress: func(fn handlerWithError) handlerWithError {
 				return func(w http.ResponseWriter, r *http.Request) error {
 					return fn(w, r)
 				}
 			},
-			interval: ival,
-			sleep:    25 * time.Millisecond,
+			sleep: 25 * time.Millisecond,
 		}
 
 		return t
 	}
 }
+
+func (t *PollingTransport) InnerTransport() *Transport { return t.Transport }
 
 func (t *PollingTransport) Run(_w http.ResponseWriter, r *http.Request, opts ...Option) (err error) {
 	for _, opt := range opts {
@@ -67,6 +69,7 @@ func (t *PollingTransport) Run(_w http.ResponseWriter, r *http.Request, opts ...
 
 	ctx := r.Context()
 	ctx, cancel := context.WithCancel(ctx)
+
 	t.Transport.shutdown = func() { cancel() }
 
 	switch r.Method {
@@ -119,7 +122,15 @@ Write:
 // longPoll allows a connection for a specified amout of time... then releases a payload
 func (t *PollingTransport) poll(w http.ResponseWriter, r *http.Request) error {
 	var ctx = r.Context()
-	var interval = time.After(t.interval)
+	var interval, timeout = make(<-chan time.Time), make(<-chan struct{})
+
+	if fn, ok := ctx.Value(eios.SessionIntervalKey).(eios.IntervalChannel); ok {
+		interval = fn()
+	}
+	if fn, ok := ctx.Value(eios.SessionTimeoutKey).(eios.TimeoutChannel); ok {
+		timeout = fn()
+	}
+
 	var packets eiop.Payload
 
 Write:
@@ -127,10 +138,20 @@ Write:
 		select {
 		case packet := <-t.receive:
 			packets = append(packets, packet)
-		case <-ctx.Done():
+		case <-timeout:
 			break Write
 		case <-interval:
+			for i := 0; i < len(t.receive); i++ {
+				packet := <-t.receive
+				packets = append(packets, packet)
+			}
+			if len(packets) == 0 && t.sendPing {
+				packets = append(packets, eiop.Packet{T: eiop.PingPacket, D: nil})
+			}
 			break Write
+		case <-ctx.Done():
+			t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{ErrTimeoutSocket}}
+			return nil
 		default:
 			time.Sleep(t.sleep) // let other things come in if things are coming quick...
 			if len(packets) > 0 && len(t.receive) == 0 {
@@ -146,12 +167,13 @@ Write:
 		}
 	}
 
-	t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{}} // shutdown the HTTP connection
+	t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{ErrCloseSocket}} // shutdown the HTTP connection
 	return nil
 }
 
 // gather pulls in all of the posts
 func (t *PollingTransport) emit(w http.ResponseWriter, r *http.Request) error {
+
 	var payload eiop.Payload
 	if err := t.codec.PayloadDecoder.From(r.Body).ReadPayload(&payload); err != nil {
 		t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{err}}
@@ -159,6 +181,11 @@ func (t *PollingTransport) emit(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	for _, packet := range payload {
+		switch packet.T {
+		case eiop.PongPacket:
+			t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{ErrCloseSocket}}
+			return nil
+		}
 		t.send <- packet
 	}
 
@@ -246,5 +273,14 @@ func jsonp(next handlerWithError) handlerWithError {
 		fmt.Fprint(w, `");`)
 
 		return nil
+	}
+}
+
+func WithPollingSleep(d time.Duration) Option {
+	return func(t Transporter) {
+		switch v := t.(type) {
+		case *PollingTransport:
+			v.sleep = d
+		}
 	}
 }

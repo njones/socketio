@@ -4,6 +4,7 @@
 package engineio
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -49,6 +50,8 @@ func (v4 *serverV4) new(opts ...Option) *serverV4 {
 func (v4 *serverV4) prev() Server { return v4.serverV3 }
 
 func (v4 *serverV4) serveTransport(w http.ResponseWriter, r *http.Request) (transport eiot.Transporter, err error) {
+	ctx := r.Context()
+
 	if origin := r.Header.Get("Origin"); origin != "" {
 		if strings.EqualFold(origin, r.URL.Hostname()) {
 			w.Header().Set("Access-Control-Allow-Origin", r.URL.Host)
@@ -58,10 +61,16 @@ func (v4 *serverV4) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		return nil, IOR
 	}
 
-	sessionID := sessionIDFrom(r)
+	// ses := v4.sessions.WithContext(r.Context())
+	// ctx := ses.WithInterval(v4.pingInterval)
+	sessionID, _ := ctx.Value(ctxSessionID).(SessionID)
+
 	if sessionID == "" {
 		sessionID = v4.generateID()
-		transportName := transportNameFrom(r)
+		// ctx := r.Context()
+		ctx = context.WithValue(ctx, ctxSessionID, sessionID)
+
+		transportName, _ := r.Context().Value(ctxTransportName).(TransportName)
 		transport = v4.transports[transportName](sessionID, v4.codec)
 		if err := v4.sessions.Set(transport); err != nil {
 			return nil, err
@@ -76,7 +85,10 @@ func (v4 *serverV4) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 			Write(http.ResponseWriter, *http.Request) error
 		}); ok {
 			transport.Send(eiop.Packet{T: eiop.NoopPacket, D: eiot.WriteClose{}})
-			return transport, ToEOH(t.Write(w, r))
+
+			ctx = v4.sessions.WithInterval(ctx, v4.pingInterval)
+			ctx = v4.sessions.WithTimeout(ctx, v4.pingTimeout)
+			return transport, ToEOH(t.Write(w, r.WithContext(ctx)))
 		}
 	}
 
@@ -91,12 +103,15 @@ func (v4 *serverV4) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		opts = []eiot.Option{eiot.WithIsUpgrade(isUpgrade)}
 	}
 
-	go func() { v4.transportRunError <- transport.Run(w, r, append(v4.eto, opts...)...) }()
+	ctx = v4.sessions.WithInterval(ctx, v4.pingInterval)
+	ctx = v4.sessions.WithTimeout(ctx, v4.pingTimeout)
+
+	go func() { v4.transportRunError <- transport.Run(w, r.WithContext(ctx), append(v4.eto, opts...)...) }()
 
 	return
 }
 
-func (v4 *serverV4) handshakePacket(sessionID SessionID, transportName eiot.Name) eiop.Packet {
+func (v4 *serverV4) handshakePacket(sessionID SessionID, transportName TransportName) eiop.Packet {
 	packet := v4.serverV3.handshakePacket(sessionID, transportName)
 	packet.D = &eiop.HandshakeV4{HandshakeV3: packet.D.(*eiop.HandshakeV3), MaxPayload: v4.maxPayload}
 	return packet

@@ -51,19 +51,21 @@ func doBinaryAckPacket(v1 *ServerV1) func(SocketID, siot.Socket) error {
 func runV3(v3 *ServerV3) func(SocketID, *Request) error {
 	return func(socketID SocketID, req *Request) error {
 		for socket := range v3.tr().Receive(socketID) {
-			doV3(v3, socketID, socket, req)
+			if err := doV3(v3, socketID, socket, req); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
 }
 
-func doV3(v3 *ServerV3, socketID SocketID, socket siot.Socket, req *Request) {
+func doV3(v3 *ServerV3, socketID SocketID, socket siot.Socket, req *Request) error {
 	switch socket.Type {
 	case siop.BinaryAckPacket.Byte():
 		if err := v3.doBinaryAckPacket(socketID, socket); err != nil {
 			v3.tr().Send(socketID, serviceError(err), siop.WithType(byte(siop.ErrorPacket)))
 		}
-		return
+		return nil
 	}
-	doV2(v3.prev, socketID, socket, req)
+	return doV2(v3.prev, socketID, socket, req)
 }

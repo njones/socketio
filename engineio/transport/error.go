@@ -6,4 +6,6 @@ const (
 	ErrTransportDecode   erro.String = "[%s] transport decode: %w"
 	ErrTransportEncode   erro.String = "[%s] transport encode: %w"
 	ErrUnsupportedMethod erro.String = "%s not supported"
+	ErrCloseSocket       erro.String = "close socket"
+	ErrTimeoutSocket     erro.String = "socket timeout"
 )

@@ -45,6 +45,8 @@ func NewWebsocketTransport(chanBuf int) func(SessionID, Codec) Transporter {
 	}
 }
 
+func (t *WebsocketTransport) InnerTransport() *Transport { return t.Transport }
+
 func (t *WebsocketTransport) Run(w http.ResponseWriter, r *http.Request, opts ...Option) (err error) {
 	for _, opt := range opts {
 		opt(t)

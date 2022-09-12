@@ -17,7 +17,6 @@ import (
 
 	sio "github.com/njones/socketio"
 	eio "github.com/njones/socketio/engineio"
-	eiot "github.com/njones/socketio/engineio/transport"
 	itst "github.com/njones/socketio/internal/test"
 	"github.com/stretchr/testify/assert"
 	sock "golang.org/x/net/websocket"
@@ -29,8 +28,8 @@ type (
 	testParamsOutFn func(*testing.T) (sio.Server, int, map[string][][]string, *sync.WaitGroup)
 )
 
-var runTest, skipTest = itst.RunTest, itst.SkipTest //lint:ignore U1000 Ignore unused function when testing
-var testingQuickPoll = eio.WithTransport("polling", eiot.NewPollingTransport(1000, 5*time.Millisecond))
+var runTest, skipTest = itst.RunTest, itst.SkipTest               //lint:ignore U1000 Ignore unused function when testing
+var testingQuickPoll = eio.WithPingInterval(5 * time.Millisecond) // eio.WithTransport("polling", eiot.NewPollingTransport(1000)) // 5*time.Millisecond
 
 func checkCount(t *testing.T, count int) {
 	if !assert.Greater(t, count, 0, "%s: make sure that the want map key is correct", t.Name()) {
@@ -241,7 +240,7 @@ func (c *v1PollingClient) parse(body []byte) (rtn [][]byte) {
 			x *= 10
 			y := int(b - '0')
 			if y < 0 || y > 9 {
-				assert.Fail(c.t, "parse: %s at idx: %d", string(body), i)
+				assert.Fail(c.t, fmt.Sprintf("parse: %c %d at idx: %d", b, y, i))
 			}
 			x += y
 		}
@@ -294,7 +293,7 @@ func (c *v1PollingClient) get(URL string) [][]byte {
 	resp, err := c.client.Get(URL)
 	assert.NoError(c.t, err)
 
-	assert.Equal(c.t, 200, resp.StatusCode)
+	assert.Equal(c.t, 200, resp.StatusCode, URL)
 
 	c.buffer.Reset()
 	_, err = c.buffer.ReadFrom(resp.Body)

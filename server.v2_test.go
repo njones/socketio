@@ -8,13 +8,17 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/njones/socketio"
 	"github.com/njones/socketio/callback"
+	"github.com/njones/socketio/engineio"
 	"github.com/njones/socketio/serialize"
 	"github.com/njones/socketio/session"
 	"github.com/stretchr/testify/assert"
 )
+
+var testingOptionsV2 = []socketio.Option{engineio.WithPingTimeout(2 * time.Second), engineio.WithPingInterval(500 * time.Millisecond)}
 
 func TestServerV2(t *testing.T) {
 	var opts = []func(*testing.T){}
@@ -132,7 +136,7 @@ func PollingTestV2(opts []func(*testing.T), EIOv int, v1 socketio.Server, count 
 
 func SendingToTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -163,14 +167,14 @@ func SendingToTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]st
 
 func SendingToAllClientsExceptTheSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
 			"grab1": {
 				{`42["broadcast","Hello friends!"]`},
 				{`42["broadcast","Hello friends!"]`},
-				nil,
+				{`2`},
 			},
 		}
 		count = len(want["grab1"])
@@ -196,16 +200,16 @@ func SendingToAllClientsExceptTheSenderV2(t *testing.T) (socketio.Server, int, m
 
 func SendingToAllClientsInGameRoomExceptSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
 			"grab1": {
 				{`42["nice game","let's play a game"]`},
-				nil,
+				{`2`},
 				{`42["nice game","let's play a game"]`},
-				nil,
-				nil, // sender...
+				{`2`},
+				{`2`}, // sender...
 			},
 		}
 		count = len(want["grab1"])
@@ -234,24 +238,24 @@ func SendingToAllClientsInGameRoomExceptSenderV2(t *testing.T) (socketio.Server,
 
 func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
 			"grab1": {
 				{`42["nice game","let's play a game (too)"]`},
-				nil,
+				{`2`},
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
-				nil,
+				{`2`},
 				{`42["nice game","let's play a game (too)"]`},
-				nil,
+				{`2`},
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
-				nil,
-				nil, // sender...
+				{`2`},
+				{`2`}, // sender...
 			},
 		}
 		count = len(want["grab1"])
@@ -283,15 +287,15 @@ func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV2(t *testing.T) (socket
 
 func SendingToAllClientsInGameRoomIncludingSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
 			"grab1": {
 				{`42["big-announcement","the game will start soon"]`},
-				nil,
+				{`2`},
 				{`42["big-announcement","the game will start soon"]`},
-				nil,
+				{`2`},
 				{`42["big-announcement","the game will start soon"]`},
 			},
 		}
@@ -321,7 +325,7 @@ func SendingToAllClientsInGameRoomIncludingSenderV2(t *testing.T) (socketio.Serv
 
 func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -334,9 +338,9 @@ func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV2(t *testing.T) (s
 			},
 			"grab1": {
 				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
-				nil,
+				{`2`},
 				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
-				nil,
+				{`2`},
 				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`}, // 42/myNamespace,["bigger-announcement","the tournament will start soon"]
 			},
 		}
@@ -375,7 +379,7 @@ func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV2(t *testing.T) (s
 
 func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -388,9 +392,9 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV2(t *testing.T)
 			},
 			"grab1": {
 				{`42/myNamespace,["event","message"]`},
-				nil,
-				nil,
-				nil,
+				{`2`},
+				{`2`},
+				{`2`},
 				{`42/myNamespace,["event","message"]`},
 			},
 		}
@@ -436,7 +440,7 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV2(t *testing.T)
 
 func SendingToIndividualSocketIDPrivateMessageV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -477,7 +481,7 @@ func SendingToIndividualSocketIDPrivateMessageV2(t *testing.T) (socketio.Server,
 
 func SendingWithAcknowledgementV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -521,7 +525,7 @@ func SendingWithAcknowledgementV2(t *testing.T) (socketio.Server, int, map[strin
 
 func SendingToAllConnectedClientsV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -555,7 +559,7 @@ func SendingToAllConnectedClientsV2(t *testing.T) (socketio.Server, int, map[str
 
 func OnEventV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -571,9 +575,9 @@ func OnEventV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 			},
 			"grab2": {
 				{`42["say goodbye","disconnecting..."]`},
-				nil,
+				{`2`},
 				{`42["say goodbye","disconnecting..."]`},
-				nil,
+				{`2`},
 				{`42["say goodbye","disconnecting..."]`},
 			},
 		}
@@ -622,7 +626,7 @@ func OnEventV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 
 func RejectTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -654,7 +658,7 @@ func RejectTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]strin
 
 func SendingBinaryEventFromClientV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v2   = socketio.NewServerV2(testingQuickPoll)
+		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{

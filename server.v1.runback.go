@@ -41,13 +41,15 @@ func autoConnect(v1 *ServerV1, newPacket siop.NewPacket) func(transport eiot.Tra
 func runV1(v1 *ServerV1) func(SocketID, *Request) error {
 	return func(socketID SocketID, req *Request) error {
 		for socket := range v1.tr().Receive(socketID) {
-			doV1(v1, socketID, socket, req)
+			if err := doV1(v1, socketID, socket, req); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
 }
 
-func doV1(v1 *ServerV1, socketID SocketID, socket siot.Socket, req *Request) {
+func doV1(v1 *ServerV1, socketID SocketID, socket siot.Socket, req *Request) error {
 	switch socket.Type {
 	case siop.ConnectPacket.Byte():
 		if err := v1.doConnectPacket(socketID, socket, req); err != nil {
@@ -65,10 +67,15 @@ func doV1(v1 *ServerV1, socketID SocketID, socket siot.Socket, req *Request) {
 		if err := v1.doAckPacket(socketID, socket); err != nil {
 			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
 		}
+	case siop.ErrorPacket.Byte():
+		if e, ok := socket.Data.(error); ok {
+			return e
+		}
 	default:
 		err := ErrInvalidPacketType.F("v1", socket)
 		v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
 	}
+	return nil
 }
 
 // doConnectPacket the function

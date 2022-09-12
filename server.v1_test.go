@@ -3,44 +3,36 @@ package socketio_test
 import (
 	"bytes"
 	"fmt"
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/njones/socketio"
 	"github.com/njones/socketio/callback"
+	"github.com/njones/socketio/engineio"
 	"github.com/njones/socketio/serialize"
 	"github.com/njones/socketio/session"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestServerStatus(t *testing.T) {
-	svr := socketio.NewServerV4()
-
-	req, err := http.NewRequest("GET", "/socket.io/?transport=polling", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rec := httptest.NewRecorder()
-
-	svr.ServeHTTP(rec, req)
-
-	t.Error(rec.Result().StatusCode)
+var testingOptionsV1 = []socketio.Option{
+	engineio.WithSessionShave(1 * time.Millisecond),
+	engineio.WithPingTimeout(500 * time.Millisecond),
 }
 
 func TestServerV1(t *testing.T) {
-	var opts = []func(*testing.T){runTest("sending to the client.Websocket")}
+	var opts = []func(*testing.T){}
 	var EIOv = 2
 
 	runWithOptions := map[string]testParamsInFn{
 		"Polling": func(v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
 			return PollingTestV1(opts, EIOv, v1, count, seq, syncOn)
 		},
-		"Websocket": func(v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
-			return WebsocketTestV1(opts, EIOv, v1, count, seq, syncOn)
-		},
+		// "Websocket": func(v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
+		// 	return WebsocketTestV1(opts, EIOv, v1, count, seq, syncOn)
+		// },
 	}
 
 	integration := map[string]testParamsOutFn{
@@ -226,7 +218,7 @@ func WebsocketTestV1(opts []func(*testing.T), EIOv int, vX socketio.Server, coun
 
 func SendingToTheClientV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -255,7 +247,7 @@ func SendingToTheClientV1(*testing.T) (socketio.Server, int, map[string][][]stri
 
 func SendingToAllClientsExceptTheSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -286,7 +278,7 @@ func SendingToAllClientsExceptTheSenderV1(*testing.T) (socketio.Server, int, map
 
 func SendingToAllClientsInGameRoomExceptSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -322,7 +314,7 @@ func SendingToAllClientsInGameRoomExceptSenderV1(*testing.T) (socketio.Server, i
 
 func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -369,7 +361,7 @@ func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV1(*testing.T) (socketio
 
 func SendingToAllClientsInGameRoomIncludingSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -405,7 +397,7 @@ func SendingToAllClientsInGameRoomIncludingSenderV1(*testing.T) (socketio.Server
 
 func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -457,7 +449,7 @@ func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV1(*testing.T) (soc
 
 func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -516,7 +508,7 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV1(*testing.T) (
 
 func SendingToIndividualSocketIDPrivateMessageV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -555,7 +547,7 @@ func SendingToIndividualSocketIDPrivateMessageV1(*testing.T) (socketio.Server, i
 
 func SendingWithAcknowledgementV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -597,7 +589,7 @@ func SendingWithAcknowledgementV1(t *testing.T) (socketio.Server, int, map[strin
 
 func SendingToAllConnectedClientsV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -629,7 +621,7 @@ func SendingToAllConnectedClientsV1(*testing.T) (socketio.Server, int, map[strin
 
 func OnEventV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
@@ -694,7 +686,7 @@ func OnEventV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 
 func RejectTheClientV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
-		v1   = socketio.NewServerV1(testingQuickPoll)
+		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{

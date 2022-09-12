@@ -8,8 +8,15 @@ import (
 	eiot "github.com/njones/socketio/engineio/transport"
 )
 
+type ctxKey string
+
+const ctxSessionID ctxKey = "sessionID"
+const ctxTransportName ctxKey = "transportName"
+const ctxEIOVersion ctxKey = "eioVersion"
+
 type (
-	SessionID = eios.ID
+	SessionID     = eios.ID
+	TransportName = eiot.Name
 
 	EIOVersionStr string
 	EIOVersionInt int

@@ -45,8 +45,6 @@ func (v3 *serverV3) new(opts ...Option) *serverV3 {
 	v3.pingTimeout = 5000 * time.Millisecond
 	v3.pingInterval = 25000 * time.Millisecond
 
-	v3.eto = append(v3.eto, eiot.WithPingInterval(v3.pingInterval))
-
 	v3.codec = eiot.Codec{
 		PacketEncoder:  eiop.NewPacketEncoderV3,
 		PacketDecoder:  eiop.NewPacketDecoderV3,
@@ -68,6 +66,8 @@ func (v3 *serverV3) new(opts ...Option) *serverV3 {
 func (v3 *serverV3) prev() Server { return v3.serverV2 }
 
 func (v3 *serverV3) serveTransport(w http.ResponseWriter, r *http.Request) (transport eiot.Transporter, err error) {
+	ctx := r.Context()
+
 	if origin := r.Header.Get("Origin"); origin != "" {
 		if strings.EqualFold(origin, r.URL.Hostname()) {
 			w.Header().Set("Access-Control-Allow-Origin", r.URL.Host)
@@ -94,8 +94,12 @@ func (v3 *serverV3) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		if t, ok := transport.(interface {
 			Write(http.ResponseWriter, *http.Request) error
 		}); ok {
+
+			ctx = v3.sessions.WithInterval(ctx, v3.pingInterval)
+			ctx = v3.sessions.WithTimeout(ctx, v3.pingTimeout)
+
 			transport.Send(eiop.Packet{T: eiop.NoopPacket, D: eiot.WriteClose{}})
-			return transport, ToEOH(t.Write(w, r))
+			return transport, ToEOH(t.Write(w, r.WithContext(ctx)))
 		}
 	}
 
@@ -110,12 +114,15 @@ func (v3 *serverV3) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		opts = []eiot.Option{eiot.WithIsUpgrade(isUpgrade)}
 	}
 
-	go func() { v3.transportRunError <- transport.Run(w, r, append(v3.eto, opts...)...) }()
+	ctx = v3.sessions.WithInterval(ctx, v3.pingInterval)
+	ctx = v3.sessions.WithTimeout(ctx, v3.pingTimeout)
+
+	go func() { v3.transportRunError <- transport.Run(w, r.WithContext(ctx), append(v3.eto, opts...)...) }()
 
 	return
 }
 
-func (v3 *serverV3) handshakePacket(sessionID SessionID, transportName eiot.Name) eiop.Packet {
+func (v3 *serverV3) handshakePacket(sessionID SessionID, transportName TransportName) eiop.Packet {
 	packet := v3.serverV2.handshakePacket(sessionID, transportName)
 	packet.D = &eiop.HandshakeV3{HandshakeV2: packet.D.(*eiop.HandshakeV2), PingInterval: eiop.Duration(v3.pingInterval)}
 	return packet

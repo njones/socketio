@@ -11,6 +11,7 @@ package engineio
 //
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"sort"
@@ -52,8 +53,8 @@ type serverV2 struct {
 	eto []eiot.Option
 
 	servers    map[EIOVersionStr]server
-	sessions   mapSessionToTransport
-	transports map[eiot.Name]func(SessionID, eiot.Codec) eiot.Transporter
+	sessions   mapSessions
+	transports map[TransportName]func(SessionID, eiot.Codec) eiot.Transporter
 
 	transportRunError chan error
 }
@@ -69,8 +70,6 @@ func (v2 *serverV2) new(opts ...Option) *serverV2 {
 	v2.transportChanBuf = 1000
 	v2.transportRunError = make(chan error, 1)
 
-	v2.eto = append(v2.eto, eiot.WithPingTimeout(v2.pingTimeout))
-
 	v2.generateID = eios.GenerateID
 	v2.codec = eiot.Codec{
 		PacketEncoder:  eiop.NewPacketEncoderV2,
@@ -83,10 +82,10 @@ func (v2 *serverV2) new(opts ...Option) *serverV2 {
 		v2.servers = make(map[EIOVersionStr]server)
 	}
 	v2.servers[Version2] = v2
-	v2.sessions = NewSessionMap()
-	v2.transports = make(map[eiot.Name]func(SessionID, eiot.Codec) eiot.Transporter)
+	v2.sessions = NewSessions()
+	v2.transports = make(map[TransportName]func(SessionID, eiot.Codec) eiot.Transporter)
 
-	WithTransport("polling", eiot.NewPollingTransport(v2.transportChanBuf, time.Second*3))(v2)
+	WithTransport("polling", eiot.NewPollingTransport(v2.transportChanBuf))(v2)
 	WithTransport("websocket", eiot.NewWebsocketTransport(v2.transportChanBuf))(v2)
 
 	v2.With(v2, opts...)
@@ -122,11 +121,13 @@ func (v2 *serverV2) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot
 		return nil, ErrURIPath
 	}
 
+	sessionID := sessionIDFrom(r)
+
 	switch r.Method {
 	case http.MethodGet, http.MethodOptions:
 		break
 	case http.MethodPost:
-		if sessionIDFrom(r) != "" {
+		if sessionID != "" {
 			break
 		}
 		fallthrough
@@ -145,7 +146,12 @@ func (v2 *serverV2) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot
 		return nil, ErrNoTransport
 	}
 
-	transport, err := server.serveTransport(w, r)
+	ctx := r.Context()
+	ctx = context.WithValue(ctx, ctxSessionID, sessionID)
+	ctx = context.WithValue(ctx, ctxTransportName, transportName)
+	ctx = context.WithValue(ctx, ctxEIOVersion, eioVersion)
+
+	transport, err := server.serveTransport(w, r.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -161,6 +167,8 @@ func ToEOH(err error) error {
 }
 
 func (v2 *serverV2) serveTransport(w http.ResponseWriter, r *http.Request) (transport eiot.Transporter, err error) {
+	ctx := r.Context()
+
 	if origin := r.Header.Get("Origin"); origin != "" {
 		if strings.EqualFold(origin, r.URL.Hostname()) {
 			w.Header().Set("Access-Control-Allow-Origin", r.URL.Host)
@@ -170,10 +178,10 @@ func (v2 *serverV2) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		return nil, IOR
 	}
 
-	sessionID := sessionIDFrom(r)
+	sessionID, _ := ctx.Value(ctxSessionID).(SessionID)
 	if sessionID == "" {
 		sessionID = v2.generateID()
-		transportName := transportNameFrom(r)
+		transportName, _ := r.Context().Value(ctxTransportName).(TransportName)
 		transport = v2.transports[transportName](sessionID, v2.codec)
 		if err := v2.sessions.Set(transport); err != nil {
 			return nil, err
@@ -188,7 +196,11 @@ func (v2 *serverV2) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 			Write(http.ResponseWriter, *http.Request) error
 		}); ok {
 			transport.Send(eiop.Packet{T: eiop.NoopPacket, D: eiot.WriteClose{}})
-			return transport, ToEOH(t.Write(w, r))
+
+			ctx = v2.sessions.WithTimeout(ctx, v2.pingTimeout)
+			ctx = v2.sessions.WithInterval(ctx, v2.pingTimeout-10*time.Millisecond)
+
+			return transport, ToEOH(t.Write(w, r.WithContext(ctx)))
 		}
 	}
 
@@ -203,12 +215,16 @@ func (v2 *serverV2) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		opts = []eiot.Option{eiot.WithIsUpgrade(isUpgrade)}
 	}
 
-	go func() { v2.transportRunError <- transport.Run(w, r, append(v2.eto, opts...)...) }()
+	ctx = v2.sessions.WithTimeout(ctx, v2.pingTimeout*4)
+	ctx = v2.sessions.WithInterval(ctx, v2.pingTimeout)
+
+	opts = append(opts, eiot.WithNoPing())
+	go func() { v2.transportRunError <- transport.Run(w, r.WithContext(ctx), append(v2.eto, opts...)...) }()
 
 	return
 }
 
-func (v2 *serverV2) handshakePacket(sessionID SessionID, transportName eiot.Name) eiop.Packet {
+func (v2 *serverV2) handshakePacket(sessionID SessionID, transportName TransportName) eiop.Packet {
 	return eiop.Packet{
 		T: eiop.OpenPacket,
 		D: &eiop.HandshakeV2{
@@ -239,7 +255,7 @@ func (v2 *serverV2) doUpgrade(transport eiot.Transporter, err error) func(http.R
 	}
 }
 
-func (v2 *serverV2) upgrades(name eiot.Name, tps map[eiot.Name]func(SessionID, eiot.Codec) eiot.Transporter) []string {
+func (v2 *serverV2) upgrades(name TransportName, tps map[TransportName]func(SessionID, eiot.Codec) eiot.Transporter) []string {
 	if v2.allowUpgrades {
 		switch name {
 		case "polling":
