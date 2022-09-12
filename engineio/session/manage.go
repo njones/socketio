@@ -4,8 +4,12 @@ import "time"
 
 type sessionCtxKey string
 
-const SessionTimeoutKey sessionCtxKey = "timeout"
-const SessionIntervalKey sessionCtxKey = "interval"
+const (
+	SessionExtendTimeoutKey sessionCtxKey = "extendTimeout"
+	SessionTimeoutKey       sessionCtxKey = "timeout"
+	SessionIntervalKey      sessionCtxKey = "interval"
+)
 
+type ExtendTimeoutFunc func()
 type TimeoutChannel func() <-chan struct{}
 type IntervalChannel func() <-chan time.Time

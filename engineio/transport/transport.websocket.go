@@ -6,9 +6,11 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	eiop "github.com/njones/socketio/engineio/protocol"
-	"golang.org/x/sync/errgroup"
+	eios "github.com/njones/socketio/engineio/session"
+	errg "golang.org/x/sync/errgroup"
 	ws "nhooyr.io/websocket"
 )
 
@@ -53,15 +55,16 @@ func (t *WebsocketTransport) Run(w http.ResponseWriter, r *http.Request, opts ..
 	}
 
 	ctx, cancel := context.WithCancel(r.Context())
-	t.Transport.shutdown = func() { cancel() }
 
-	t.conn, err = ws.Accept(w, r, &ws.AcceptOptions{
+	t.conn, err = ws.Accept(w, r.WithContext(ctx), &ws.AcceptOptions{
 		OriginPatterns: t.origin,
 	})
 	if err != nil {
 		cancel()
 		return err
 	}
+
+	t.Transport.shutdown = func() { t.conn.Close(ws.StatusNormalClosure, "shutdown"); cancel() }
 
 	// A context value can be passed in to allow the a server to be setup before the
 	// probe is attempted, this is good for testing. If the context key is not here
@@ -77,7 +80,7 @@ func (t *WebsocketTransport) Run(w http.ResponseWriter, r *http.Request, opts ..
 		}
 	}
 
-	grp, ctx := errgroup.WithContext(ctx)
+	grp, ctx := errg.WithContext(ctx)
 	grp.Go(func() error { return t.incoming(ctx) })
 	grp.Go(func() error { return t.outgoing(r.WithContext(ctx)) })
 
@@ -129,9 +132,29 @@ func (t *WebsocketTransport) probe(w http.ResponseWriter, r *http.Request) error
 }
 
 func (t *WebsocketTransport) incoming(ctx context.Context) (err error) {
+	var interval, timeout = make(<-chan time.Time), make(<-chan struct{})
+	if fn, ok := ctx.Value(eios.SessionIntervalKey).(eios.IntervalChannel); ok {
+		interval = fn()
+	}
+	if fn, ok := ctx.Value(eios.SessionTimeoutKey).(eios.TimeoutChannel); ok {
+		timeout = fn()
+	}
+
 	for {
 		select {
+		case <-timeout:
+			t.Transport.shutdown()
+		case <-interval:
+			cw, err := t.conn.Writer(ctx, ws.MessageText)
+			if err != nil {
+				return err
+			}
+			if err = t.codec.PacketEncoder.To(cw).WritePacket(eiop.Packet{T: eiop.PingPacket, D: nil}); err != nil {
+				return err
+			}
+			cw.Close()
 		case <-ctx.Done():
+			t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{ErrTimeoutSocket}}
 			return nil
 		case packet := <-t.receive:
 			if packet.T == eiop.BinaryPacket {
@@ -161,10 +184,15 @@ func (t *WebsocketTransport) outgoing(r *http.Request) error {
 	ctx := r.Context()
 	enc := t.codec.PacketEncoder
 	dec := t.codec.PacketDecoder
-	for {
 
+	extendTimeout, ok := ctx.Value(eios.SessionExtendTimeoutKey).(eios.ExtendTimeoutFunc)
+	if !ok {
+		extendTimeout = func() {}
+	}
+
+	for {
 		// - /* blocking */ read a packet off the wire...
-		mt, cr, err := t.conn.Reader(ctx)
+		mt, cr, err := t.conn.Reader(ctx) // this will close when shutdown() is called.
 		if err != nil {
 			return err
 		}
@@ -187,9 +215,6 @@ func (t *WebsocketTransport) outgoing(r *http.Request) error {
 		case eiop.ClosePacket:
 			t.conn.CloseRead(ctx)
 			t.conn.Close(ws.StatusNormalClosure, "cross origin WebSocket accepted")
-
-			close(t.send)
-			close(t.receive)
 			return nil
 		case eiop.PingPacket:
 			cw, err := t.conn.Writer(ctx, ws.MessageText)
@@ -201,6 +226,9 @@ func (t *WebsocketTransport) outgoing(r *http.Request) error {
 				return err
 			}
 			cw.Close()
+		case eiop.PongPacket:
+			extendTimeout()
+			continue
 		case eiop.MessagePacket:
 			t.send <- packet
 		case eiop.UpgradePacket:
