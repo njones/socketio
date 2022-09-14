@@ -116,6 +116,41 @@ func (c *lifecycle) WithCancel(ctx context.Context) context.Context {
 	return ctx
 }
 
+func (c *lifecycle) WithInterval(ctx context.Context, d time.Duration) context.Context {
+	if d <= 0 {
+		return ctx
+	}
+
+	sessionID, ok := ctx.Value(ctxSessionID).(SessionID)
+	if !ok {
+		// there is no session to attach the timer to
+		return ctx
+	}
+
+	c.id = d
+	c.i.LoadOrStore(sessionID, time.NewTicker(c.id))
+
+	ctx = context.WithValue(ctx, eios.SessionExtendIntervalKey, eios.ExtendIntervalFunc(func(d time.Duration) {
+		if val, ok := c.i.Load(sessionID); ok {
+			if d != 0 {
+				val.(*time.Ticker).Reset(d)
+			} else {
+				val.(*time.Ticker).Reset(c.id)
+			}
+		}
+	}))
+
+	var interval eios.IntervalChannel = func() <-chan time.Time {
+		if val, ok := c.i.Load(sessionID); ok {
+			val.(*time.Ticker).Reset(c.id)
+			return val.(*time.Ticker).C
+		}
+		return nil
+	}
+
+	return context.WithValue(ctx, eios.SessionIntervalKey, interval)
+}
+
 func (c *lifecycle) WithTimeout(ctx context.Context, d time.Duration) context.Context {
 	if d <= 0 {
 		return ctx
@@ -151,40 +186,6 @@ func (c *lifecycle) WithTimeout(ctx context.Context, d time.Duration) context.Co
 	}))
 
 	return context.WithValue(x, eios.SessionTimeoutKey, timeout)
-}
-
-func (c *lifecycle) WithInterval(ctx context.Context, d time.Duration) context.Context {
-	if d <= 0 {
-		return ctx
-	}
-
-	sessionID, ok := ctx.Value(ctxSessionID).(SessionID)
-	if !ok {
-		// there is no session to attach the timer to
-		return ctx
-	}
-
-	c.id = d
-
-	if val, ok := c.t.Load(sessionID); ok {
-		timer := val.(*time.Timer)
-		timer.Stop()
-		timer.Reset((c.td + c.id) - c.shave)
-	}
-
-	if val, ok := c.i.LoadOrStore(sessionID, time.NewTicker(c.id)); !ok {
-		val.(*time.Ticker).Reset(c.id)
-	}
-
-	var interval eios.IntervalChannel = func() <-chan time.Time {
-		if val, ok := c.i.Load(sessionID); ok {
-			val.(*time.Ticker).Reset(c.id)
-			return val.(*time.Ticker).C
-		}
-		return nil
-	}
-
-	return context.WithValue(ctx, eios.SessionIntervalKey, interval)
 }
 
 func (c *lifecycle) setTimeout(sessionID SessionID, start time.Time) {

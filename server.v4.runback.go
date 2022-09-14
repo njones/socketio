@@ -1,6 +1,9 @@
 package socketio
 
 import (
+	"errors"
+	"fmt"
+
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
 )
@@ -43,9 +46,14 @@ func doV4(v4 *ServerV4, socketID SocketID, socket siot.Socket, req *Request) err
 	switch socket.Type {
 	case siop.ConnectPacket.Byte():
 		if err := v1.doConnectPacket(socketID, socket, req); err != nil {
+			if errors.Is(err, ErrNamespaceNotFound) {
+				v4.tr().Send(socketID, serviceError(fmt.Errorf("%snvalid namespace", "I")), siop.WithNamespace(socket.Namespace), siop.WithType(byte(siop.ConnectErrorPacket)))
+				return nil
+			}
 			v4.tr().Send(socketID, serviceError(err), siop.WithType(byte(siop.ConnectErrorPacket)))
 			return nil
 		}
+
 		connectResponse := map[string]interface{}{"sid": socketID.String()}
 		v4.tr().Send(socketID, connectResponse, siop.WithType(siop.ConnectPacket.Byte()), siop.WithNamespace(socket.Namespace))
 		v4.tr().(rawTransport).Transport(socketID).SendBuffer()
