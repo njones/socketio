@@ -15,6 +15,14 @@ func (fn ErrorWrap) Callback(data ...interface{}) error { return fn() }
 func (ErrorWrap) Serialize() (string, error)            { return "", ErrStubSerialize }
 func (ErrorWrap) Unserialize(string) error              { return ErrStubUnserialize }
 
+type FuncAny func(...interface{}) error
+
+func (fn FuncAny) Callback(v ...interface{}) error {
+	return fn(v...)
+}
+func (FuncAny) Serialize() (string, error) { return "", ErrStubSerialize }
+func (FuncAny) Unserialize(string) error   { return ErrStubUnserialize }
+
 type FuncString func(string)
 
 func (fn FuncString) Callback(v ...interface{}) error {
