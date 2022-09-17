@@ -46,6 +46,8 @@ type inSocketV1 struct {
 	id []SocketID
 	to []Room
 
+	_uniqID map[SocketID]struct{}
+
 	protectedEventName map[string]struct{}
 
 	onConnect map[Namespace]onConnectCallbackVersion1
@@ -70,8 +72,16 @@ func (v1 *inSocketV1) setNsp(namespace Namespace) {
 	}
 	v1.ns = namespace
 }
-func (v1 *inSocketV1) addID(id SocketID) { v1.id = append(v1.id, id) }
-func (v1 *inSocketV1) addTo(room Room)   { v1.to = append(v1.to, room) }
+func (v1 *inSocketV1) addID(id SocketID) {
+	if v1._uniqID == nil {
+		v1._uniqID = make(map[SocketID]struct{})
+	}
+	if _, ok := v1._uniqID[id]; !ok {
+		v1.id = append(v1.id, id)
+		v1._uniqID[id] = struct{}{}
+	}
+}
+func (v1 *inSocketV1) addTo(room Room) { v1.to = append(v1.to, room) }
 
 func (v1 inSocketV1) nsp() Namespace {
 	if v1.ns == "" {
@@ -146,6 +156,7 @@ func (v1 inSocketV1) Emit(event Event, data ...Data) error {
 			if id == v1._socketID && v1.isSender {
 				continue // skip sending back to sender
 			}
+
 			if _, inSet := uniqueID[id]; !inSet {
 				v1.addID(id)
 				uniqueID[id] = struct{}{}
@@ -170,6 +181,7 @@ func (v1 inSocketV1) Emit(event Event, data ...Data) error {
 			if id == v1._socketID && !v1.isServer {
 				continue // skip sending back to sender
 			}
+
 			if _, inSet := uniqueID[id]; !inSet {
 				v1.addID(id)
 				uniqueID[id] = struct{}{}
@@ -181,20 +193,29 @@ func (v1 inSocketV1) Emit(event Event, data ...Data) error {
 }
 
 func (v1 inSocketV1) emit(event Event, data ...Data) error {
-	callbackData, eventCallback, err := scrub(v1.binary, event, data)
+	hasBin, callbackData, eventCallback, err := scrub(v1.binary, event, data)
 	if err != nil {
 		return err
 	}
 
 	transport := v1.tr()
 	for _, id := range v1.id {
-		data := []siop.Option{siop.WithType(siop.EventPacket.Byte()), siop.WithNamespace(v1.nsp())}
+		opts := []siop.Option{siop.WithNamespace(v1.nsp())}
+		if hasBin {
+			if eventCallback != nil {
+				opts = append(opts, siop.WithType(siop.BinaryAckPacket.Byte()))
+			} else {
+				opts = append(opts, siop.WithType(siop.BinaryEventPacket.Byte()))
+			}
+		} else {
+			opts = append(opts, siop.WithType(siop.EventPacket.Byte()))
+		}
 		if eventCallback != nil {
 			ackID := transport.AckID()
 			v1.on(fmt.Sprintf("%s%d", ackIDEventPrefix, ackID), eventCallback)
-			data = append(data, siop.WithAckID(ackID))
+			opts = append(opts, siop.WithAckID(ackID))
 		}
-		transport.Send(id, callbackData, data...)
+		transport.Send(id, callbackData, opts...)
 	}
 
 	return nil

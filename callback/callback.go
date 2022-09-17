@@ -17,11 +17,25 @@ func (ErrorWrap) Unserialize(string) error              { return ErrStubUnserial
 
 type FuncAny func(...interface{}) error
 
-func (fn FuncAny) Callback(v ...interface{}) error {
-	return fn(v...)
+func (fn FuncAny) Callback(v ...interface{}) error { return fn(v...) }
+func (FuncAny) Serialize() (string, error)         { return "", ErrStubSerialize }
+func (FuncAny) Unserialize(string) error           { return ErrStubUnserialize }
+
+type FuncAnyAck func(...interface{}) []seri.Serializable
+
+func (fn FuncAnyAck) Callback(v ...interface{}) error { return ErrStubSerialize }
+func (fn FuncAnyAck) CallbackAck(v ...interface{}) []interface{} {
+	slice := fn(v...)
+	out := make([]interface{}, len(v))
+	for i, ice := range slice {
+		if x, ok := ice.(interface{ Interface() interface{} }); ok {
+			out[i] = x.Interface()
+		}
+	}
+	return out
 }
-func (FuncAny) Serialize() (string, error) { return "", ErrStubSerialize }
-func (FuncAny) Unserialize(string) error   { return ErrStubUnserialize }
+func (FuncAnyAck) Serialize() (string, error) { return "", ErrStubSerialize }
+func (FuncAnyAck) Unserialize(string) error   { return ErrStubUnserialize }
 
 type FuncString func(string)
 

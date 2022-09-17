@@ -81,9 +81,13 @@ func WithTransportChannelBuffer(n int) Option {
 
 func WithTransportOption(opts ...eiot.Option) Option {
 	return func(svr Server) {
+	ServerCheck: // makes things an O(2^n) check...
 		switch v := svr.(type) {
 		case *serverV2:
 			v.eto = append(v.eto, opts...)
+		case interface{ prev() Server }:
+			svr = v.prev()
+			goto ServerCheck
 		}
 	}
 }

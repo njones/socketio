@@ -78,7 +78,9 @@ func NewTransport(id SocketID, eioTransport eiot.Transporter, fn siop.NewPacket)
 func (t *Transport) SendBuffer() {
 	for _, packet := range t.buffer.packets {
 		t.eioTransport.Send(packet)
+		t.sendBinary(packet)
 	}
+	t.buffer.packets = t.buffer.packets[:0] // clear the buffer
 }
 
 func (t *Transport) Send(data Data, opts ...Option) {
@@ -88,39 +90,57 @@ func (t *Transport) Send(data Data, opts ...Option) {
 		t.buffer.packets = append(t.buffer.packets, eioPacket)
 		return
 	}
+
 	t.eioTransport.Send(eioPacket)
+	t.sendBinary(eioPacket)
+}
+
+func (t *Transport) sendBinary(packet eiop.Packet) {
+	if pac, ok := packet.D.(siop.Packet).(interface{ GetData() interface{} }); ok {
+		objs, _ := pac.GetData().([]interface{})
+		for _, v := range objs {
+			if r, ok := v.(io.Reader); ok {
+				eioBinaryPacket := eiop.Packet{T: eiop.BinaryPacket, D: r}
+				t.eioTransport.Send(eioBinaryPacket)
+			}
+		}
+	}
 }
 
 func (t *Transport) Receive() <-chan Socket {
 	go func() {
 		for eioPacket := range t.eioTransport.Receive() {
-
 			switch data := eioPacket.D.(type) {
 			case string:
-				sioPacket := t.newPacket().(io.ReaderFrom)
-				if _, err := sioPacket.ReadFrom(strings.NewReader(data)); err != nil {
+				pac := t.newPacket().(packet)
+				if _, err := pac.(io.ReaderFrom).ReadFrom(strings.NewReader(data)); err != nil {
 					t.eioTransport.Send(eiop.Packet{T: eiop.NoopPacket, D: err})
 				}
-				if pac, ok := sioPacket.(interface{ GetType() byte }); ok {
-					switch pac.GetType() {
-					case siop.BinaryEventPacket.Byte(), siop.BinaryAckPacket.Byte():
-						if in, ok := sioPacket.(interface{ ReadBinary() func(io.Reader) error }); ok {
-						EIOPacketData:
-							for eioPacket = range t.eioTransport.Receive() {
-								if eioPacket.T != eiop.BinaryPacket {
-									break EIOPacketData
-								}
 
-								bin := in.ReadBinary()
-								if r, ok := eioPacket.D.(io.Reader); ok && bin != nil {
-									bin(r)
-								}
+				switch pac.GetType() {
+				case siop.BinaryEventPacket.Byte(), siop.BinaryAckPacket.Byte():
+					if in, ok := pac.(interface{ ReadBinary() func(io.Reader) error }); ok {
+
+						t.receive <- packetToSocket(pac)
+						var cntPlaceholders int
+					EIOPacketData:
+						for eioPacket = range t.eioTransport.Receive() {
+							bin := in.ReadBinary()
+							if r, ok := eioPacket.D.(io.Reader); ok && bin != nil {
+								bin(r)
+							}
+
+							cntPlaceholders++
+							if cntPlaceholders >= len(pac.GetData().([]interface{}))-1 || // TODO(njones): base this off of the binary index...
+								eioPacket.T != eiop.BinaryPacket {
+								break EIOPacketData
 							}
 						}
+						continue
 					}
 				}
 
-				t.receive <- packetToSocket(sioPacket.(packet))
+				t.receive <- packetToSocket(pac)
 			}
 
 			switch eioPacket.T {
