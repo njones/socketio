@@ -16,6 +16,7 @@ func doConnectPacketV4(v4 *ServerV4) func(SocketID, siot.Socket, *Request) error
 		v4.setPrefix()
 		v4.setSocketID(socketID)
 		v4.setNsp(socket.Namespace)
+		v4.setHandshake(socket.Data)
 
 		if fn, ok := v4.onConnect[socket.Namespace]; ok {
 			return fn(&SocketV4{inSocketV4: v4.inSocketV4, req: req})

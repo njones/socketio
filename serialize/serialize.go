@@ -1,6 +1,7 @@
 package serialize
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"strconv"
@@ -53,6 +54,7 @@ var (
 	ErrParam  = _errorWrap{Error(nil)}
 	F64Param  = _float64Param{Float64(0)}
 	IntParam  = _intParam{Integer(0)}
+	MapParam  = _mapParam{Map(nil)}
 	StrParam  = _stringParam{String("")}
 	UintParam = _uintParam{Uinteger(0)}
 )
@@ -120,6 +122,20 @@ func (x *_int) Interface() (v interface{})   { return int(*x) }
 func (x _intParam) Unserialize(string) error { return nil }
 func (x _intParam) String() string           { return "" }
 func (x _int) Param() Serializable           { v := _int(0); return &v }
+
+type (
+	_map      map[string]interface{}
+	_mapParam struct{ SerializableParam }
+)
+
+func Map(m map[string]interface{}) _map           { return _map(m) }
+func (x _map) String() (str string)               { str, _ = x.Serialize(); return }
+func (x _map) Serialize() (str string, err error) { b, err := json.Marshal(x); return string(b), err }
+func (x _map) Unserialize(str string) (err error) { return json.Unmarshal([]byte(str), &x) }
+func (x _map) Interface() (v interface{})         { return (map[string]interface{})(x) }
+func (x _mapParam) Unserialize(string) error      { return nil }
+func (x _mapParam) String() string                { return "" }
+func (x _map) Param() Serializable                { return _map{} }
 
 type (
 	_string      string
