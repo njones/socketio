@@ -27,6 +27,7 @@ type innTooExceptEmit interface {
 type inSocketV4 struct {
 	onConnect map[Namespace]onConnectCallbackVersion4
 
+	hs   handshakeV4
 	prev inSocketV3
 
 	except []Room
@@ -39,6 +40,12 @@ func (v4 *inSocketV4) clone() inSocketV4 {
 	return rtn
 }
 
+func (v4 *inSocketV4) setHandshake(in interface{}) {
+	switch val := in.(type) {
+	case map[string]interface{}:
+		v4.hs.Auth = func() map[string]interface{} { return val }
+	}
+}
 func (v4 *inSocketV4) setIsServer(isServer bool)     { v4.prev.setIsServer(isServer) }
 func (v4 *inSocketV4) setIsSender(isSender bool)     { v4.prev.setIsSender(isSender) }
 func (v4 *inSocketV4) setSocketID(socketID SocketID) { v4.prev.setSocketID(socketID) }
@@ -154,8 +161,9 @@ type SocketV4 struct {
 	req *Request
 }
 
-func (v4 *SocketV4) ID() SocketID      { return SocketID(v4.prefix()) + v4.socketID() }
-func (v4 *SocketV4) Request() *Request { return v4.req }
+func (v4 *SocketV4) ID() SocketID           { return SocketID(v4.prefix()) + v4.socketID() }
+func (v4 *SocketV4) Request() *Request      { return v4.req }
+func (v4 *SocketV4) Handshake() handshakeV4 { v4.hs.init(); return v4.hs }
 
 func (v4 *SocketV4) Emit(event Event, data ...Data) error {
 	v4.addID(v4.socketID())

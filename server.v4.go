@@ -10,6 +10,16 @@ import (
 
 // https://socket.io/docs/v4/migrating-from-3-x-to-4-0/
 
+type handshakeV4 struct {
+	Auth func() map[string]interface{}
+}
+
+func (v4 *handshakeV4) init() {
+	if v4.Auth == nil {
+		v4.Auth = func() map[string]interface{} { return map[string]interface{}{} }
+	}
+}
+
 type ServerV4 struct {
 	inSocketV4
 
