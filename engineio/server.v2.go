@@ -88,6 +88,7 @@ func (v2 *serverV2) new(opts ...Option) *serverV2 {
 	WithTransport("polling", eiot.NewPollingTransport(v2.transportChanBuf))(v2)
 	WithTransport("websocket", eiot.NewWebsocketTransport(v2.transportChanBuf))(v2)
 
+	v2.eto = []eiot.Option{eiot.WithGovernor(1500*time.Microsecond, 500*time.Microsecond)}
 	v2.With(v2, opts...)
 
 	return v2

@@ -1,7 +1,9 @@
 package transport
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,8 +26,13 @@ type WebsocketTransport struct {
 
 	origin      []string
 	PingMsg     string
+	buffered    bool // default: false
 	isInitProbe bool
 	fnOnUpgrade func() error
+	governor    struct {
+		sleep   time.Duration
+		minTime time.Duration
+	}
 }
 
 func NewWebsocketTransport(chanBuf int) func(SessionID, Codec) Transporter {
@@ -80,7 +87,9 @@ func (t *WebsocketTransport) Run(w http.ResponseWriter, r *http.Request, opts ..
 	grp.Go(func() error { return t.incoming(ctx) })
 	grp.Go(func() error { return t.outgoing(r.WithContext(ctx)) })
 
-	return grp.Wait()
+	err = grp.Wait()
+	t.conn.Close(ws.StatusNormalClosure, "done")
+	return err
 }
 
 func (t *WebsocketTransport) probe(w http.ResponseWriter, r *http.Request) error {
@@ -142,13 +151,12 @@ func (t *WebsocketTransport) incoming(ctx context.Context) (err error) {
 	if !ok {
 		extendTimeout = func() {}
 	}
-	extendInterval, ok := ctx.Value(eios.SessionExtendIntervalKey).(eios.ExtendIntervalFunc)
-	if !ok {
-		extendTimeout = func() {}
-	}
 
-	defer t.conn.Close(ws.StatusNormalClosure, "write")
 	var done func()
+	var reason string
+	defer func() { t.conn.Close(ws.StatusNormalClosure, reason) }()
+
+	var start = time.Now()
 Write:
 
 	for {
@@ -157,10 +165,13 @@ Write:
 			if stop != nil {
 				done = stop
 			}
+			reason = "stop"
 			break Write
 		case <-timeout:
+			reason = "timeout"
 			break Write
 		case <-interval:
+			reason = "interval"
 			cw, err := t.conn.Writer(ctx, ws.MessageText)
 			if err != nil {
 				if cw != nil {
@@ -168,14 +179,15 @@ Write:
 				}
 				return err
 			}
+
 			if err = t.codec.PacketEncoder.To(cw).WritePacket(eiop.Packet{T: eiop.PingPacket, D: nil}); err != nil {
 				cw.Close()
 				return err
 			}
 			cw.Close()
 		case packet := <-t.receive:
+			reason = "receive"
 			extendTimeout()
-			extendInterval(0)
 			if packet.T == eiop.BinaryPacket {
 				cw, err := t.conn.Writer(ctx, ws.MessageBinary)
 				if err != nil {
@@ -185,9 +197,18 @@ Write:
 				io.Copy(cw, packet.D.(io.Reader))
 				cw.Close()
 			} else {
+
 				cw, err := t.conn.Writer(ctx, ws.MessageText)
 				if err != nil {
 					return err
+				}
+
+				if t.governor.minTime > 0 {
+					// we need to slow things down sometimes...
+					if time.Since(start) < t.governor.minTime {
+						time.Sleep(t.governor.sleep)
+					}
+					start = time.Now()
 				}
 
 				t.codec.PacketEncoder.To(cw).WritePacket(packet)
@@ -206,40 +227,63 @@ Write:
 		}
 	default:
 	}
+
 	return nil
 }
 
-func (t *WebsocketTransport) outgoing(r *http.Request) error {
-	ctx := r.Context()
-	enc := t.codec.PacketEncoder
-	dec := t.codec.PacketDecoder
+type syncReader struct {
+	r io.Reader
+	s *sync.WaitGroup
+}
 
+func (r syncReader) Read(p []byte) (n int, err error) {
+	n, err = r.r.Read(p)
+	if errors.Is(err, io.EOF) {
+		r.s.Done()
+	}
+	return n, err
+}
+
+func (t *WebsocketTransport) outgoing(r *http.Request) (err error) {
+	ctx, enc, dec := r.Context(), t.codec.PacketEncoder, t.codec.PacketDecoder
 	extendTimeout, ok := ctx.Value(eios.SessionExtendTimeoutKey).(eios.ExtendTimeoutFunc)
 	if !ok {
 		extendTimeout = func() {}
 	}
-	extendInterval, ok := ctx.Value(eios.SessionExtendIntervalKey).(eios.ExtendIntervalFunc)
-	if !ok {
-		extendTimeout = func() {}
-	}
 
-	defer t.conn.Close(ws.StatusNormalClosure, "write")
+	var unbuffered = new(sync.WaitGroup)
+	defer t.conn.Close(ws.StatusNormalClosure, "read")
 
 	for {
+		if !t.buffered {
+			unbuffered.Wait()
+		}
+
 		// - /* blocking */ read a packet off the wire...
-		mt, cr, err := t.conn.Reader(ctx) // this will close when shutdown() is called.
+		msgType, cr, err := t.conn.Reader(ctx) // this will close when shutdown() is called.
 		if err != nil {
 			return err
 		}
 
 		extendTimeout()
-		extendInterval(0)
-
-		if mt != ws.MessageText {
+		if msgType != ws.MessageText {
 			// this is binary data
-			t.send <- eiop.Packet{
-				T: eiop.BinaryPacket,
-				D: cr,
+			if t.buffered {
+				var buf = new(bytes.Buffer)
+				_, err := buf.ReadFrom(cr)
+				if err != nil {
+					return err
+				}
+				t.send <- eiop.Packet{
+					T: eiop.BinaryPacket,
+					D: buf,
+				}
+			} else {
+				unbuffered.Add(1)
+				t.send <- eiop.Packet{
+					T: eiop.BinaryPacket,
+					D: syncReader{r: cr, s: unbuffered},
+				}
 			}
 			continue
 		}

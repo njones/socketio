@@ -23,6 +23,9 @@ func doConnectPacketV2(v2 *ServerV2) func(SocketID, siot.Socket, *Request) error
 func doBinaryEventPacket(v2 *ServerV2) func(SocketID, siot.Socket) error {
 	v1 := v2.prev
 	return func(socketID SocketID, socket siot.Socket) (err error) {
+		type callbackAck interface {
+			CallbackAck(...interface{}) []interface{}
+		}
 
 		switch data := socket.Data.(type) {
 		case []interface{}:
@@ -31,9 +34,21 @@ func doBinaryEventPacket(v2 *ServerV2) func(SocketID, siot.Socket) error {
 				return ErrOnBinaryEvent.F(data)
 			}
 			if fn, ok := v1.events[socket.Namespace][event][socketID]; ok {
+				if socket.AckID > 0 {
+					if fn, ok := fn.(callbackAck); ok {
+						vals := fn.CallbackAck(data[1:]...)
+						return v1.tr().Send(socketID, vals, siop.WithNamespace(socket.Namespace), siop.WithAckID(socket.AckID), siop.WithType(byte(siop.BinaryAckPacket)))
+					}
+				}
 				return fn.Callback(data[1:]...)
 			}
 			if fn, ok := v1.events[socket.Namespace][event][serverEvent]; ok {
+				if socket.AckID > 0 {
+					if fn, ok := fn.(callbackAck); ok {
+						vals := fn.CallbackAck(data[1:]...)
+						return v1.tr().Send(socketID, vals, siop.WithNamespace(socket.Namespace), siop.WithAckID(socket.AckID), siop.WithType(byte(siop.BinaryAckPacket)))
+					}
+				}
 				return fn.Callback(data[1:]...)
 			}
 		case []string:

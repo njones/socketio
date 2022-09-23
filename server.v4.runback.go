@@ -3,6 +3,7 @@ package socketio
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
@@ -19,10 +20,17 @@ func doConnectPacketV4(v4 *ServerV4) func(SocketID, siot.Socket, *Request) error
 		v4.setPrefix()
 		v4.setSocketID(socketID)
 		v4.setNsp(socket.Namespace)
-		v4.setHandshake(socket.Data)
+
+		var h = handshakeV4{}
+		switch val := socket.Data.(type) {
+		case map[string]interface{}:
+			h.Auth = func() map[string]interface{} {
+				return val
+			}
+		}
 
 		if fn, ok := v4.onConnect[socket.Namespace]; ok {
-			return fn(&SocketV4{inSocketV4: v4.inSocketV4, req: req})
+			return fn(&SocketV4{inSocketV4: v4.inSocketV4, req: req, han: h})
 		}
 
 		return ErrNamespaceNotFound.F(socket.Namespace)
@@ -56,6 +64,18 @@ func doV4(v4 *ServerV4, socketID SocketID, socket siot.Socket, req *Request) err
 
 		connectResponse := map[string]interface{}{"sid": socketID.String()}
 		v4.tr().Send(socketID, connectResponse, siop.WithType(siop.ConnectPacket.Byte()), siop.WithNamespace(socket.Namespace))
+
+		time.Sleep(600 * time.Microsecond) // wait, wait... what! wait for a 1/2 beat... otherwise it may ship things to fast to the websocket endpoint...
+
+		var data = socket.Data
+		if data == nil {
+			data = map[string]interface{}{}
+		}
+		connectNamespace := []interface{}{"auth", data}
+		v4.tr().Send(socketID, connectNamespace, siop.WithType(siop.EventPacket.Byte()), siop.WithNamespace(socket.Namespace))
+
+		time.Sleep(600 * time.Microsecond) // yup, things were flaky when there wasn't a sleep...
+
 		v4.tr().(rawTransport).Transport(socketID).SendBuffer()
 		return nil
 	}

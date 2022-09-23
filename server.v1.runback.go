@@ -115,6 +115,10 @@ func doDisconnectPacket(v1 *ServerV1) func(SocketID, siot.Socket, *Request) erro
 
 func doEventPacket(v1 *ServerV1) func(SocketID, siot.Socket) error {
 	return func(socketID SocketID, socket siot.Socket) (err error) {
+		type callbackAck interface {
+			CallbackAck(...interface{}) []interface{}
+		}
+
 		switch data := socket.Data.(type) {
 		case []interface{}:
 			event, ok := data[0].(string)
@@ -126,9 +130,21 @@ func doEventPacket(v1 *ServerV1) func(SocketID, siot.Socket) error {
 			}
 
 			if fn, ok := v1.events[socket.Namespace][event][socketID]; ok {
+				if socket.AckID > 0 {
+					if fn, ok := fn.(callbackAck); ok {
+						vals := fn.CallbackAck(data...)
+						return v1.tr().Send(socketID, vals, siop.WithNamespace(socket.Namespace), siop.WithAckID(socket.AckID), siop.WithType(byte(siop.AckPacket)))
+					}
+				}
 				return fn.Callback(data...)
 			}
 			if fn, ok := v1.events[socket.Namespace][event][serverEvent]; ok {
+				if socket.AckID > 0 {
+					if fn, ok := fn.(callbackAck); ok {
+						vals := fn.CallbackAck(data...)
+						return v1.tr().Send(socketID, vals, siop.WithNamespace(socket.Namespace), siop.WithAckID(socket.AckID), siop.WithType(byte(siop.AckPacket)))
+					}
+				}
 				return fn.Callback(data...)
 			}
 		case []string:

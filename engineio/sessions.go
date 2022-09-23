@@ -130,16 +130,6 @@ func (c *lifecycle) WithInterval(ctx context.Context, d time.Duration) context.C
 	c.id = d
 	c.i.LoadOrStore(sessionID, time.NewTicker(c.id))
 
-	ctx = context.WithValue(ctx, eios.SessionExtendIntervalKey, eios.ExtendIntervalFunc(func(d time.Duration) {
-		if val, ok := c.i.Load(sessionID); ok {
-			if d != 0 {
-				val.(*time.Ticker).Reset(d)
-			} else {
-				val.(*time.Ticker).Reset(c.id)
-			}
-		}
-	}))
-
 	var interval eios.IntervalChannel = func() <-chan time.Time {
 		if val, ok := c.i.Load(sessionID); ok {
 			val.(*time.Ticker).Reset(c.id)
