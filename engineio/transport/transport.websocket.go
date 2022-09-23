@@ -138,10 +138,19 @@ func (t *WebsocketTransport) incoming(ctx context.Context) (err error) {
 	if fn, ok := ctx.Value(eios.SessionCloseChannelKey).(func() <-chan func()); ok {
 		cancel = fn()
 	}
+	extendTimeout, ok := ctx.Value(eios.SessionExtendTimeoutKey).(eios.ExtendTimeoutFunc)
+	if !ok {
+		extendTimeout = func() {}
+	}
+	extendInterval, ok := ctx.Value(eios.SessionExtendIntervalKey).(eios.ExtendIntervalFunc)
+	if !ok {
+		extendTimeout = func() {}
+	}
 
+	defer t.conn.Close(ws.StatusNormalClosure, "write")
 	var done func()
-
 Write:
+
 	for {
 		select {
 		case stop := <-cancel:
@@ -154,13 +163,19 @@ Write:
 		case <-interval:
 			cw, err := t.conn.Writer(ctx, ws.MessageText)
 			if err != nil {
+				if cw != nil {
+					cw.Close()
+				}
 				return err
 			}
 			if err = t.codec.PacketEncoder.To(cw).WritePacket(eiop.Packet{T: eiop.PingPacket, D: nil}); err != nil {
+				cw.Close()
 				return err
 			}
 			cw.Close()
 		case packet := <-t.receive:
+			extendTimeout()
+			extendInterval(0)
 			if packet.T == eiop.BinaryPacket {
 				cw, err := t.conn.Writer(ctx, ws.MessageBinary)
 				if err != nil {
@@ -175,9 +190,7 @@ Write:
 					return err
 				}
 
-				if err = t.codec.PacketEncoder.To(cw).WritePacket(packet); err != nil {
-					return err
-				}
+				t.codec.PacketEncoder.To(cw).WritePacket(packet)
 				cw.Close()
 			}
 		}
@@ -192,7 +205,6 @@ Write:
 			defer done()
 		}
 	default:
-		return nil
 	}
 	return nil
 }
@@ -206,6 +218,12 @@ func (t *WebsocketTransport) outgoing(r *http.Request) error {
 	if !ok {
 		extendTimeout = func() {}
 	}
+	extendInterval, ok := ctx.Value(eios.SessionExtendIntervalKey).(eios.ExtendIntervalFunc)
+	if !ok {
+		extendTimeout = func() {}
+	}
+
+	defer t.conn.Close(ws.StatusNormalClosure, "write")
 
 	for {
 		// - /* blocking */ read a packet off the wire...
@@ -213,6 +231,9 @@ func (t *WebsocketTransport) outgoing(r *http.Request) error {
 		if err != nil {
 			return err
 		}
+
+		extendTimeout()
+		extendInterval(0)
 
 		if mt != ws.MessageText {
 			// this is binary data
@@ -249,7 +270,6 @@ func (t *WebsocketTransport) outgoing(r *http.Request) error {
 			}
 			cw.Close()
 		case eiop.PongPacket:
-			extendTimeout()
 			continue
 		case eiop.MessagePacket:
 			t.send <- packet
