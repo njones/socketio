@@ -1,6 +1,7 @@
 package socketio
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -57,6 +58,9 @@ func doV1(v1 *ServerV1, socketID SocketID, socket siot.Socket, req *Request) err
 		}
 	case siop.DisconnectPacket.Byte():
 		if err := v1.doDisconnectPacket(socketID, socket, req); err != nil {
+			if errors.Is(err, ErrBadOnDisconnectSocket) {
+				return nil
+			}
 			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
 		}
 	case siop.EventPacket.Byte():
@@ -100,6 +104,11 @@ func doDisconnectPacket(v1 *ServerV1) func(SocketID, siot.Socket, *Request) erro
 			v1.tr().Leave(socket.Namespace, socketID, socketIDPrefix+socketID.String())
 			return fn.Callback("client namespace disconnect")
 		}
+		// for any socket id at the io. (server) level...
+		if fn, ok := v1.events[socket.Namespace][OnDisconnectEvent][serverEvent]; ok {
+			v1.tr().Leave(socket.Namespace, socketID, socketIDPrefix+socketID.String())
+			return fn.Callback("client namespace disconnect")
+		}
 		return ErrBadOnDisconnectSocket
 	}
 }
@@ -112,20 +121,27 @@ func doEventPacket(v1 *ServerV1) func(SocketID, siot.Socket) error {
 			if !ok {
 				return ErrBadEventName
 			}
+			if socket.Type != siop.DisconnectPacket.Byte() {
+				data = data[1:]
+			}
 
 			if fn, ok := v1.events[socket.Namespace][event][socketID]; ok {
-				return fn.Callback(data[1:]...)
+				return fn.Callback(data...)
 			}
 			if fn, ok := v1.events[socket.Namespace][event][serverEvent]; ok {
-				return fn.Callback(data[1:]...)
+				return fn.Callback(data...)
 			}
 		case []string:
 			event := data[0]
+			if socket.Type != siop.DisconnectPacket.Byte() {
+				data = data[1:]
+			}
+
 			if fn, ok := v1.events[socket.Namespace][event][socketID]; ok {
-				return fn.Callback(stoi(data[1:])...)
+				return fn.Callback(stoi(data)...)
 			}
 			if fn, ok := v1.events[socket.Namespace][event][serverEvent]; ok {
-				return fn.Callback(stoi(data[1:])...)
+				return fn.Callback(stoi(data)...)
 			}
 		}
 		return ErrInvalidData.F(fmt.Sprintf("type %s", socket.Data)).KV("do", "eventPacket")

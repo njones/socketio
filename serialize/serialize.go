@@ -50,6 +50,7 @@ func stringify(val interface{}) string {
 }
 
 var (
+	AnyParam  = _anyWrap{Any(nil)}
 	BinParam  = _binaryWrap{Binary(nil)}
 	ErrParam  = _errorWrap{Error(nil)}
 	F64Param  = _float64Param{Float64(0)}
@@ -58,6 +59,19 @@ var (
 	StrParam  = _stringParam{String("")}
 	UintParam = _uintParam{Uinteger(0)}
 )
+
+type (
+	_any     struct{ a interface{} }
+	_anyWrap struct{ SerializableWrap }
+)
+
+func Any(v interface{}) *_any                      { return &_any{v} }
+func (x *_any) String() (str string)               { str, _ = x.Serialize(); return }
+func (x *_any) Serialize() (str string, err error) { return "", ErrSerializableBinary }
+func (x *_any) Unserialize(str string) (err error) { return ErrSerializableBinary }
+func (x *_any) Interface() (v interface{})         { return x.a }
+func (x _anyWrap) Unserialize(string) error        { return nil }
+func (x _anyWrap) String() string                  { return "" }
 
 type (
 	_binary     struct{ r io.Reader }
