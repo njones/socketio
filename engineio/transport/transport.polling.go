@@ -47,12 +47,16 @@ func NewPollingTransport(chanBuf int) func(SessionID, Codec) Transporter {
 	}
 }
 
-func (t *PollingTransport) InnerTransport() *Transport { return t.Transport }
-
-func (t *PollingTransport) Run(w http.ResponseWriter, r *http.Request, opts ...Option) (err error) {
+func (t *PollingTransport) With(opts ...Option) {
 	for _, opt := range opts {
 		opt(t)
 	}
+}
+
+func (t *PollingTransport) InnerTransport() *Transport { return t.Transport }
+
+func (t *PollingTransport) Run(w http.ResponseWriter, r *http.Request, opts ...Option) (err error) {
+	t.With(opts...)
 
 	switch r.Method {
 	case http.MethodGet:
@@ -216,9 +220,8 @@ type compressResponseWriter struct {
 func (z compressResponseWriter) Write(p []byte) (n int, err error) { return z.Writer.Write(p) }
 
 func WithHTTPCompression(kind HTTPCompressionKind) Option {
-	return func(t Transporter) {
-		switch v := t.(type) {
-		case *PollingTransport:
+	return func(o OptionWith) {
+		if v, ok := o.(*PollingTransport); ok {
 			switch kind {
 			case CompressGZIP:
 				// https://gist.github.com/the42/1956518
@@ -238,8 +241,6 @@ func WithHTTPCompression(kind HTTPCompressionKind) Option {
 					}
 				}
 			}
-		default:
-			// show log of no compression used...
 		}
 	}
 }
@@ -285,9 +286,8 @@ func jsonp(next handlerWithError) handlerWithError {
 }
 
 func WithPollingSleep(d time.Duration) Option {
-	return func(t Transporter) {
-		switch v := t.(type) {
-		case *PollingTransport:
+	return func(o OptionWith) {
+		if v, ok := o.(*PollingTransport); ok {
 			v.sleep = d
 		}
 	}

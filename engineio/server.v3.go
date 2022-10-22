@@ -37,7 +37,12 @@ type serverV3 struct {
 	}
 }
 
-func NewServerV3(opts ...Option) Server { return (&serverV3{}).new(opts...) }
+func NewServerV3(opts ...Option) Server {
+	v3 := (&serverV3{}).new(opts...)
+	v3.With(opts...)
+
+	return v3
+}
 
 func (v3 *serverV3) new(opts ...Option) *serverV3 {
 	v3.serverV2 = (&serverV2{}).new(opts...)
@@ -59,11 +64,15 @@ func (v3 *serverV3) new(opts ...Option) *serverV3 {
 	}
 	v3.servers[Version3] = v3
 
-	v3.With(v3, opts...)
 	return v3
 }
 
-func (v3 *serverV3) prev() Server { return v3.serverV2 }
+func (v3 *serverV3) With(opts ...Option) {
+	v3.serverV2.With(opts...)
+	for _, opt := range opts {
+		opt(v3)
+	}
+}
 
 func (v3 *serverV3) serveTransport(w http.ResponseWriter, r *http.Request) (transport eiot.Transporter, err error) {
 	ctx := r.Context()

@@ -5,14 +5,9 @@ import (
 )
 
 func WithPingInterval(d time.Duration) Option {
-	return func(svr Server) {
-	ServerCheck:
-		switch v := svr.(type) {
-		case *serverV3:
+	return func(o OptionWith) {
+		if v, ok := o.(*serverV3); ok {
 			v.pingInterval = d
-		case interface{ prev() Server }:
-			svr = v.prev()
-			goto ServerCheck
 		}
 	}
 }
@@ -40,9 +35,8 @@ func (x CORSmaxAge) val() interface{}               { return int(x) }
 func (x CORSoptionsSuccessStatus) val() interface{} { return int(x) }
 
 func WithCors(opts ...corsOption) Option {
-	return func(svr Server) {
-		switch v := svr.(type) {
-		case *serverV3:
+	return func(o OptionWith) {
+		if v, ok := o.(*serverV3); ok {
 			for _, opt := range opts {
 				switch opt.(type) {
 				case CORSenable:

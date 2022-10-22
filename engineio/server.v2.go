@@ -59,7 +59,11 @@ type serverV2 struct {
 	transportRunError chan error
 }
 
-func NewServerV2(opts ...Option) Server { return (&serverV2{}).new(opts...) }
+func NewServerV2(opts ...Option) Server {
+	v2 := (&serverV2{}).new(opts...)
+	v2.With(opts...)
+	return v2
+}
 
 func (v2 *serverV2) new(opts ...Option) *serverV2 {
 	v2.path = amp("/engine.io")
@@ -89,14 +93,13 @@ func (v2 *serverV2) new(opts ...Option) *serverV2 {
 	WithTransport("websocket", eiot.NewWebsocketTransport(v2.transportChanBuf))(v2)
 
 	v2.eto = []eiot.Option{eiot.WithGovernor(1500*time.Microsecond, 500*time.Microsecond)}
-	v2.With(v2, opts...)
 
 	return v2
 }
 
-func (v2 *serverV2) With(svr Server, opts ...Option) {
+func (v2 *serverV2) With(opts ...Option) {
 	for _, opt := range opts {
-		opt(svr)
+		opt(v2)
 	}
 }
 

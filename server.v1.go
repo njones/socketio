@@ -41,6 +41,14 @@ type ServerV1 struct {
 func NewServerV1(opts ...Option) *ServerV1 {
 	v1 := &ServerV1{}
 	v1.new(opts...)
+
+	v1.eio = eio.NewServerV2(
+		eio.WithPath(*v1.path),
+		eio.WithInitialPackets(autoConnect(v1, siop.NewPacketV2)),
+	).(eio.EIOServer)
+	v1.eio.With(opts...)
+
+	v1.With(opts...)
 	return v1
 }
 
@@ -62,30 +70,19 @@ func (v1 *ServerV1) new(opts ...Option) Server {
 
 	v1.protectedEventName = v1ProtectedEventName
 
-	v1.eio = eio.NewServerV2(
-		eio.WithPath(*v1.path), eio.WithInitialPackets(autoConnect(v1, siop.NewPacketV2)),
-	).(eio.EIOServer)
 	v1.transport = nmem.NewInMemoryTransport(siop.NewPacketV2) // set the default transport
 
 	v1.inSocketV1.binary = true   // for the v1 implementation this always is set to true
 	v1.inSocketV1.compress = true // for the v1 implementation this always is set to true
-
-	v1.With(opts...)
-	if eioSvr, ok := v1.eio.(withOption); ok {
-		eioSvr.With(v1.eio.(Server), opts...)
-	}
 
 	v1.inSocketV1.tr = func() siot.Transporter { return v1.transport }
 
 	return v1
 }
 
-// With takes in a server version and applies Options to that server object.
-func (v1 *ServerV1) With(opts ...Option) { v1.with(v1, opts...) }
-
-func (v1 *ServerV1) with(svr Server, opts ...Option) {
+func (v1 *ServerV1) With(opts ...Option) {
 	for _, opt := range opts {
-		opt(svr)
+		opt(v1)
 	}
 }
 

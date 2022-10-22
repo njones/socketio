@@ -30,6 +30,7 @@ type server interface {
 }
 
 type Server = interface {
+	OptionWith
 	ServeHTTP(http.ResponseWriter, *http.Request)
 }
 

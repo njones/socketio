@@ -29,6 +29,17 @@ type ServerV4 struct {
 func NewServerV4(opts ...Option) *ServerV4 {
 	v4 := &ServerV4{}
 	v4.new(opts...)
+
+	v3 := v4.prev
+	v2 := v3.prev
+	v1 := v2.prev
+
+	v1.eio = eio.NewServerV5(
+		eio.WithPath(*v1.path),
+	).(eio.EIOServer)
+	v1.eio.With(opts...)
+
+	v4.With(opts...)
 	return v4
 }
 
@@ -41,21 +52,22 @@ func (v4 *ServerV4) new(opts ...Option) Server {
 	v1 := v2.prev
 
 	v1.run = runV4(v4)
-	v1.eio = eio.NewServerV5(eio.WithPath(*v1.path)).(eio.EIOServer)
+
 	v1.transport = nmem.NewInMemoryTransport(siop.NewPacketV5)
 	v1.protectedEventName = v4ProtectedEventName
 	v1.doConnectPacket = doConnectPacketV4(v4)
 
 	v4.inSocketV4.prev = v3.inSocketV3
-	v4.With(opts...)
-	if eioSvr, ok := v1.eio.(withOption); ok {
-		eioSvr.With(v1.eio.(Server), opts...)
-	}
 
 	return v4
 }
 
-func (v4 *ServerV4) With(opts ...Option) { v1 := v4.prev.prev.prev; v1.with(v4, opts...) }
+func (v4 *ServerV4) With(opts ...Option) {
+	v4.prev.With(opts...)
+	for _, opt := range opts {
+		opt(v4)
+	}
+}
 
 func (v4 *ServerV4) Except(room ...Room) innTooExceptEmit {
 	rtn := v4.clone()

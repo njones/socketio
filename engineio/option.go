@@ -1,4 +1,4 @@
-package socketio
+package engineio
 
 import with "github.com/njones/socketio/option"
 
