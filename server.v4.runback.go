@@ -3,7 +3,6 @@ package socketio
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
@@ -64,18 +63,6 @@ func doV4(v4 *ServerV4, socketID SocketID, socket siot.Socket, req *Request) err
 
 		connectResponse := map[string]interface{}{"sid": socketID.String()}
 		v4.tr().Send(socketID, connectResponse, siop.WithType(siop.ConnectPacket.Byte()), siop.WithNamespace(socket.Namespace))
-
-		time.Sleep(600 * time.Microsecond) // wait, wait... what! wait for a 1/2 beat... otherwise it may ship things to fast to the websocket endpoint...
-
-		var data = socket.Data
-		if data == nil {
-			data = map[string]interface{}{}
-		}
-		connectNamespace := []interface{}{"auth", data}
-		v4.tr().Send(socketID, connectNamespace, siop.WithType(siop.EventPacket.Byte()), siop.WithNamespace(socket.Namespace))
-
-		time.Sleep(600 * time.Microsecond) // yup, things were flaky when there wasn't a sleep...
-
 		v4.tr().(rawTransport).Transport(socketID).SendBuffer()
 		return nil
 	}

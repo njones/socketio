@@ -26,7 +26,12 @@ type serverV4 struct {
 	UseEIO3    bool
 }
 
-func NewServerV4(opts ...Option) Server { return (&serverV4{}).new(opts...) }
+func NewServerV4(opts ...Option) Server {
+	v4 := (&serverV4{}).new(opts...)
+	v4.With(opts...)
+
+	return v4
+}
 
 func (v4 *serverV4) new(opts ...Option) *serverV4 {
 	v4.serverV3 = (&serverV3{}).new(opts...)
@@ -43,11 +48,15 @@ func (v4 *serverV4) new(opts ...Option) *serverV4 {
 
 	v4.servers[Version4] = v4
 
-	v4.With(v4, opts...)
 	return v4
 }
 
-func (v4 *serverV4) prev() Server { return v4.serverV3 }
+func (v4 *serverV4) With(opts ...Option) {
+	v4.serverV3.With(opts...)
+	for _, opt := range opts {
+		opt(v4)
+	}
+}
 
 func (v4 *serverV4) serveTransport(w http.ResponseWriter, r *http.Request) (transport eiot.Transporter, err error) {
 	ctx := r.Context()
@@ -61,13 +70,10 @@ func (v4 *serverV4) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		return nil, IOR
 	}
 
-	// ses := v4.sessions.WithContext(r.Context())
-	// ctx := ses.WithInterval(v4.pingInterval)
 	sessionID, _ := ctx.Value(ctxSessionID).(SessionID)
 
 	if sessionID == "" {
 		sessionID = v4.generateID()
-		// ctx := r.Context()
 		ctx = context.WithValue(ctx, ctxSessionID, sessionID)
 
 		transportName, _ := r.Context().Value(ctxTransportName).(TransportName)

@@ -1,12 +1,17 @@
 package transport
 
-import "time"
+import (
+	"time"
 
-type Option func(Transporter)
+	with "github.com/njones/socketio/option"
+)
+
+type Option = with.Option
+type OptionWith = with.OptionWith
 
 func WithCodec(codec Codec) Option {
-	return func(t Transporter) {
-		switch v := t.(type) {
+	return func(o OptionWith) {
+		switch v := o.(type) {
 		case interface{ InnerTransport() *Transport }:
 			v.InnerTransport().codec = codec
 		}
@@ -14,26 +19,24 @@ func WithCodec(codec Codec) Option {
 }
 
 func OnInitProbe(b bool) Option {
-	return func(t Transporter) {
-		switch v := t.(type) {
-		case *WebsocketTransport:
+	return func(o OptionWith) {
+		if v, ok := o.(*WebsocketTransport); ok {
 			v.isInitProbe = b
 		}
 	}
 }
 
 func OnUpgrade(fn func() error) Option {
-	return func(t Transporter) {
-		switch v := t.(type) {
-		case *WebsocketTransport:
+	return func(o OptionWith) {
+		if v, ok := o.(*WebsocketTransport); ok {
 			v.fnOnUpgrade = fn
 		}
 	}
 }
 
 func WithNoPing() Option {
-	return func(t Transporter) {
-		switch v := t.(type) {
+	return func(o OptionWith) {
+		switch v := o.(type) {
 		case interface{ InnerTransport() *Transport }:
 			v.InnerTransport().sendPing = false
 		}
@@ -41,19 +44,16 @@ func WithNoPing() Option {
 }
 
 func WithBufferedReader() Option {
-	return func(t Transporter) {
-		switch v := t.(type) {
-		// TODO(njones): case *PollingTransport: ...
-		case *WebsocketTransport:
+	return func(o OptionWith) {
+		if v, ok := o.(*WebsocketTransport); ok {
 			v.buffered = true
 		}
 	}
 }
 
 func WithGovernor(minTime, sleep time.Duration) Option {
-	return func(t Transporter) {
-		switch v := t.(type) {
-		case *WebsocketTransport:
+	return func(o OptionWith) {
+		if v, ok := o.(*WebsocketTransport); ok {
 			v.governor.minTime = minTime
 			v.governor.sleep = sleep
 		}

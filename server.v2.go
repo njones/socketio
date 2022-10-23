@@ -21,6 +21,15 @@ type ServerV2 struct {
 func NewServerV2(opts ...Option) *ServerV2 {
 	v2 := &ServerV2{}
 	v2.new(opts...)
+
+	v1 := v2.prev
+	v1.eio = eio.NewServerV3(
+		eio.WithPath(*v1.path),
+		eio.WithInitialPackets(autoConnect(v1, siop.NewPacketV2)),
+	).(eio.EIOServer) // v2 uses the default engineio protocol v3
+	v1.eio.With(opts...)
+
+	v2.With(opts...)
 	return v2
 }
 
@@ -31,24 +40,22 @@ func (v2 *ServerV2) new(opts ...Option) Server {
 	v1 := v2.prev
 
 	v1.run = runV2(v2)
-	v1.eio = eio.NewServerV3(
-		eio.WithPath(*v1.path), eio.WithInitialPackets(autoConnect(v1, siop.NewPacketV2)),
-	).(eio.EIOServer) // v2 uses the default engineio protocol v3
+
 	v1.transport = nmem.NewInMemoryTransport(siop.NewPacketV2) // v2 uses the default socketio protocol v3
 	v1.doConnectPacket = doConnectPacketV2(v2)
 
 	v2.doBinaryEventPacket = doBinaryEventPacket(v2)
 	v2.inSocketV2.prev = v1.inSocketV1
 
-	v2.With(opts...)
-	if eioSvr, ok := v1.eio.(withOption); ok {
-		eioSvr.With(v1.eio.(Server), opts...)
-	}
-
 	return v2
 }
 
-func (v2 *ServerV2) With(opts ...Option) { v1 := v2.prev; v1.with(v2, opts...) }
+func (v2 *ServerV2) With(opts ...Option) {
+	v2.prev.With(opts...)
+	for _, opt := range opts {
+		opt(v2)
+	}
+}
 
 func (v2 *ServerV2) In(room Room) inToEmit {
 	rtn := v2.clone()

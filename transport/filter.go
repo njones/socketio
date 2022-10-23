@@ -11,7 +11,7 @@ type SocketArray struct {
 	filterToLocalID func(Namespace, SocketID) ([]byte, error)
 }
 
-func InitSocketArray(ns Namespace, ids []SocketID, opts ...func(*SocketArray)) SocketArray {
+func InitSocketArray(ns Namespace, ids []SocketID, opts ...func(optionWith)) SocketArray {
 	array := SocketArray{
 		namespace: ns,
 		socketIDs: ids,
@@ -20,6 +20,12 @@ func InitSocketArray(ns Namespace, ids []SocketID, opts ...func(*SocketArray)) S
 		opt(&array)
 	}
 	return array
+}
+
+func (a *SocketArray) With(opts ...option) {
+	for _, opt := range opts {
+		opt(a)
+	}
 }
 
 func (a SocketArray) IDs() []SocketID { return a.socketIDs }

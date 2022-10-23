@@ -55,12 +55,16 @@ func NewWebsocketTransport(chanBuf int) func(SessionID, Codec) Transporter {
 	}
 }
 
-func (t *WebsocketTransport) InnerTransport() *Transport { return t.Transport }
-
-func (t *WebsocketTransport) Run(w http.ResponseWriter, r *http.Request, opts ...Option) (err error) {
+func (t *WebsocketTransport) With(opts ...Option) {
 	for _, opt := range opts {
 		opt(t)
 	}
+}
+
+func (t *WebsocketTransport) InnerTransport() *Transport { return t.Transport }
+
+func (t *WebsocketTransport) Run(w http.ResponseWriter, r *http.Request, opts ...Option) (err error) {
+	t.With(opts...)
 
 	t.conn, err = ws.Accept(w, r, &ws.AcceptOptions{
 		OriginPatterns: t.origin,
@@ -332,9 +336,8 @@ func (t *WebsocketTransport) outgoing(r *http.Request) (err error) {
 }
 
 func WithPerMessageDeflate(kind HTTPCompressionKind) Option {
-	return func(t Transporter) {
-		switch v := t.(type) {
-		case *WebsocketTransport:
+	return func(o OptionWith) {
+		if v, ok := o.(*WebsocketTransport); ok {
 			_ = v
 		}
 	}

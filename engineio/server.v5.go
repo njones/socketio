@@ -50,7 +50,12 @@ type serverV5 struct {
 	*serverV4
 }
 
-func NewServerV5(opts ...Option) Server { return (&serverV5{}).new(opts...) }
+func NewServerV5(opts ...Option) Server {
+	v5 := (&serverV5{}).new(opts...)
+	v5.With(opts...)
+
+	return v5
+}
 
 func (v5 *serverV5) new(opts ...Option) *serverV5 {
 	v5.serverV4 = (&serverV4{}).new(opts...)
@@ -64,8 +69,12 @@ func (v5 *serverV5) new(opts ...Option) *serverV5 {
 
 	v5.servers[Version5] = v5
 
-	v5.With(v5, opts...)
 	return v5
 }
 
-func (v5 *serverV5) prev() Server { return v5.serverV4 }
+func (v5 *serverV5) With(opts ...Option) {
+	v5.serverV4.With(opts...)
+	for _, opt := range opts {
+		opt(v5)
+	}
+}

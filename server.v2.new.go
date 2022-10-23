@@ -4,7 +4,5 @@
 package socketio
 
 func NewServer(opts ...Option) *ServerV2 {
-	v2 := &ServerV2{}
-	v2.new(opts...)
-	return v2
+	return NewServerV2(opts...)
 }
