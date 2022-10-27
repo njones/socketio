@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -115,4 +116,34 @@ func fmtKV(kvPairs []interface{}) string {
 	}
 
 	return fmt.Sprintf("\t"+`{"%s"}`, strings.Join(pairs, `","`))
+}
+
+type Inf chan interface{}
+
+type Group struct {
+	inf Inf
+	ctx context.Context
+	fns []func(c Inf) error
+}
+
+func (g *Group) WithContext(ctx context.Context) { g.ctx = ctx }
+func (g *Group) Add(fn func(Inf) error)          { g.fns = append(g.fns, fn) }
+func (g *Group) Out() interface{}                { return <-g.inf }
+
+func (g *Group) Err() error {
+	for _, fn := range g.fns {
+		select {
+		case <-g.ctx.Done():
+			return context.Canceled
+		default:
+			if err := fn(g.inf); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func NewGroup() *Group {
+	return &Group{ctx: context.TODO(), inf: make(Inf, 1)}
 }

@@ -26,9 +26,7 @@ func NewServerV3(opts ...Option) *ServerV3 {
 
 	v2 := v3.prev
 	v1 := v2.prev
-	v1.eio = eio.NewServerV4(
-		eio.WithPath(*v1.path),
-	).(eio.EIOServer) // v2 uses the default engineio protocol v3
+	v1.eio = eio.NewServerV4(eio.WithPath(*v1.path)).(eio.EIOServer)
 	v1.eio.With(opts...)
 
 	v3.With(opts...)
@@ -44,7 +42,7 @@ func (v3 *ServerV3) new(opts ...Option) Server {
 
 	v1.run = runV3(v3)
 
-	v1.transport = nmem.NewInMemoryTransport(siop.NewPacketV4) // v2 uses the default socketio protocol v3
+	v1.transport = nmem.NewInMemoryTransport(siop.NewPacketV5)
 	v1.protectedEventName = v3ProtectedEventName
 	v1.doConnectPacket = doConnectPacketV3(v3)
 

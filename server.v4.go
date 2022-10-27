@@ -34,9 +34,7 @@ func NewServerV4(opts ...Option) *ServerV4 {
 	v2 := v3.prev
 	v1 := v2.prev
 
-	v1.eio = eio.NewServerV5(
-		eio.WithPath(*v1.path),
-	).(eio.EIOServer)
+	v1.eio = eio.NewServerV5(eio.WithPath(*v1.path)).(eio.EIOServer)
 	v1.eio.With(opts...)
 
 	v4.With(opts...)

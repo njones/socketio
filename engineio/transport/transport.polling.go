@@ -14,6 +14,10 @@ import (
 	"golang.org/x/text/transform"
 )
 
+const (
+	Polling Name = "polling"
+)
+
 type handlerWithError func(http.ResponseWriter, *http.Request) error
 
 type PollingTransport struct {
@@ -29,7 +33,7 @@ func NewPollingTransport(chanBuf int) func(SessionID, Codec) Transporter {
 		t := &PollingTransport{
 			Transport: &Transport{
 				id:       id,
-				name:     "polling",
+				name:     Polling,
 				codec:    codec,
 				send:     make(chan eiop.Packet, chanBuf),
 				receive:  make(chan eiop.Packet, chanBuf),

@@ -6,6 +6,7 @@ package socketio_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -52,8 +53,8 @@ type pollingClient interface {
 
 type websocketClient interface {
 	connect(...[]string)
-	// send(io.Reader)
-	// grab() []string
+	send(io.Reader)
+	grab() []string
 }
 
 type testClient struct {
@@ -75,89 +76,6 @@ type v1WebsocketClient struct {
 }
 
 func (c *v1WebsocketClient) ts() int64 { c.t.Helper(); return time.Now().UnixNano() }
-func (c *v1WebsocketClient) parse(body []byte) (rtn [][]byte) {
-	c.t.Helper()
-
-	var x int
-	for i := 0; i < len(body); i++ {
-		switch b := body[i]; b {
-		case ':':
-			i++
-			rtn = append(rtn, body[i:i+x])
-			i, x = i+x-1, 0 // -1 is because of the i++ loop
-		default:
-			x *= 10
-			y := int(b - '0')
-			if y < 0 || y > 9 {
-				assert.Fail(c.t, "parse: %s at idx: %d", string(body), i)
-			}
-			x += y
-		}
-	}
-	return rtn
-}
-func (c *v1WebsocketClient) connect2(queryStr ...[]string) {
-	c.t.Helper()
-
-	var query string
-	if len(queryStr[0]) > 0 {
-		query = "&" + strings.Join(queryStr[0], "&")
-	}
-
-	var err error
-	URL := fmt.Sprintf("%s/socket.io/?EIO=%d&transport=polling&t=%d%s", c.base, c.eioVersion, c.ts(), query)
-
-	resp, err := c.client.Get(URL)
-	assert.NoError(c.t, err)
-
-	assert.Equal(c.t, 200, resp.StatusCode)
-
-	c.buffer.Reset()
-	_, err = c.buffer.ReadFrom(resp.Body)
-	assert.NoError(c.t, err)
-
-	have := c.parse(c.buffer.Bytes())
-
-	assert.Equal(c.t, byte('0'), have[0][0])
-
-	var m map[string]interface{}
-	err = json.Unmarshal(have[0][1:], &m)
-	assert.NoError(c.t, err)
-
-	c.eioSessionID, _ = m["sid"].(string)
-	assert.NotEmpty(c.t, c.eioSessionID)
-
-	URL2 := strings.Replace(URL+"&sid="+c.eioSessionID, "http", "ws", 1)
-	URL2 = strings.Replace(URL2, "polling", "websocket", 1)
-
-	c.conn, err = sock.Dial(URL2, "", c.base)
-	if err != nil {
-		panic(err)
-	}
-
-	// ping
-	var n int
-	var b = make([]byte, 1000)
-	n, err = c.conn.Read(b)
-	if err != nil {
-		panic(err)
-	}
-
-	// pong
-	b[0] = '3'
-	_, err = c.conn.Write(b[:n])
-	if err != nil {
-		panic(err)
-	}
-
-	// upgrade
-	b = []byte{'5'}
-	_, err = c.conn.Write(b[:1])
-	if err != nil {
-		panic(err)
-	}
-}
-
 func (c *v1WebsocketClient) connect(queryStr ...[]string) {
 	c.t.Helper()
 
@@ -177,34 +95,12 @@ func (c *v1WebsocketClient) connect(queryStr ...[]string) {
 	var n int
 	var b = make([]byte, 1000)
 
-	// // ping
-	// n, err = c.conn.Read(b)
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// // pong
-	// b[0] = '3'
-	// _, err = c.conn.Write(b[:n])
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// // upgrade
-	// b = []byte{'5'}
-	// _, err = c.conn.Write(b[:1])
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// b = make([]byte, 1000)
-
 	n, err = c.conn.Read(b)
 	if err != nil {
 		panic(err)
 	}
 
-	assert.Equal(c.t, '0', b[0])
+	assert.Equal(c.t, uint8('0'), b[0])
 
 	var m map[string]interface{}
 	err = json.Unmarshal(b[1:n], &m)
@@ -212,6 +108,128 @@ func (c *v1WebsocketClient) connect(queryStr ...[]string) {
 
 	c.eioSessionID, _ = m["sid"].(string)
 	assert.NotEmpty(c.t, c.eioSessionID)
+}
+func (c *v1WebsocketClient) send(r io.Reader) {
+	_, err := io.Copy(c.conn, r)
+	if err != nil {
+		panic(err)
+	}
+}
+func (c *v1WebsocketClient) grab() []string {
+	c.t.Helper()
+
+	var err error
+	var rtn []string
+	for !errors.Is(err, io.EOF) {
+		var n int
+		var b = make([]byte, 1000)
+
+		n, err = c.conn.Read(b)
+		if string(b[:n]) == "2" || n == 0 { // skip the ping becuase it's all about timing... sometimes they will be there sometimes not
+			break
+		}
+		rtn = append(rtn, string(b[:n]))
+	}
+
+	return rtn
+}
+
+type v3WebsocketClient struct {
+	t *testing.T
+
+	keep40s bool
+
+	eioVersion   int
+	eioSessionID string // filled in on connect
+
+	base   string
+	buffer *bytes.Buffer
+
+	conn   net.Conn
+	client *http.Client
+}
+
+func (c *v3WebsocketClient) ts() int64 { c.t.Helper(); return time.Now().UnixNano() }
+func (c *v3WebsocketClient) connect(extraStr ...[]string) {
+	c.t.Helper()
+
+	var query string
+	if len(extraStr[0]) > 0 {
+		query = "&" + strings.Join(extraStr[0], "&")
+	}
+
+	var err error
+	URL := strings.Replace(fmt.Sprintf("%s/socket.io/?EIO=%d&transport=websocket&t=%d%s", c.base, c.eioVersion, c.ts(), query), "http", "ws", 1)
+
+	c.conn, err = sock.Dial(URL, "", c.base)
+	if err != nil {
+		panic(err)
+	}
+
+	var n int
+	var b = make([]byte, 1000)
+
+	n, err = c.conn.Read(b)
+	assert.NoError(c.t, err)
+
+	assert.Equal(c.t, byte('0'), b[0])
+
+	var m map[string]interface{}
+	err = json.Unmarshal(b[1:n], &m)
+	assert.NoError(c.t, err)
+
+	c.eioSessionID, _ = m["sid"].(string)
+	assert.NotEmpty(c.t, c.eioSessionID)
+
+	var nsConnect = "40"
+	if len(extraStr[1]) > 0 {
+		nsConnect = extraStr[1][0]
+	}
+
+	_, err = c.conn.Write([]byte(nsConnect))
+	assert.NoError(c.t, err)
+}
+func (c *v3WebsocketClient) send(r io.Reader) {
+	// this is a bit hacky... but it's working...
+	if _, ok := r.(*bytes.Reader); ok {
+		b, err := io.ReadAll(r)
+		if err != nil {
+			panic(err)
+		}
+		err = sock.Message.Send(c.conn.(*sock.Conn), b)
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
+
+	_, err := io.Copy(c.conn, r)
+	if err != nil {
+		panic(err)
+	}
+}
+func (c *v3WebsocketClient) grab() []string {
+	c.t.Helper()
+
+	var err error
+	var rtn []string
+	var i int
+	for !errors.Is(err, io.EOF) {
+		var n int
+		var b = make([]byte, 1000)
+
+		n, err = c.conn.Read(b)
+		if i == 0 && n > 1 && string(b[:2]) == "40" {
+			continue
+		}
+		if string(b[:n]) == "2" || n == 0 { // skip the ping becuase it's all about timing... sometimes they will be there sometimes not
+			break
+		}
+		rtn = append(rtn, string(b[:n]))
+		i++
+	}
+
+	return rtn
 }
 
 type v1PollingClient struct {
@@ -234,7 +252,9 @@ func (c *v1PollingClient) parse(body []byte) (rtn [][]byte) {
 		switch b := body[i]; b {
 		case ':':
 			i++
-			rtn = append(rtn, body[i:i+x])
+			if string(body[i:i+x]) != "2" { // skip the ping becuase it's all about timing... sometimes they will be there sometimes not
+				rtn = append(rtn, body[i:i+x])
+			}
 			i, x = i+x-1, 0 // -1 is because of the i++ loop
 		default:
 			x *= 10
@@ -245,6 +265,7 @@ func (c *v1PollingClient) parse(body []byte) (rtn [][]byte) {
 			x += y
 		}
 	}
+
 	return rtn
 }
 func (c *v1PollingClient) connect(queryStr ...[]string) {
@@ -286,7 +307,6 @@ func (c *v1PollingClient) grab() (rtn []string) {
 	}
 	return rtn
 }
-
 func (c *v1PollingClient) get(URL string) [][]byte {
 	c.t.Helper()
 
@@ -325,13 +345,16 @@ func (c *v3PollingClient) connect(extraStr ...[]string) {
 	if len(extraStr[0]) > 0 {
 		query = "&" + strings.Join(extraStr[0], "&")
 	}
+
+	var err error
 	URL := fmt.Sprintf("%s/socket.io/?EIO=%d&transport=polling&t=%d%s", c.base, c.eioVersion, c.ts(), query)
+
 	have := c.get(URL)
 	assert.NotEmpty(c.t, have)
 	assert.Equal(c.t, byte('0'), have[0][0])
 
 	var m map[string]interface{}
-	err := json.Unmarshal(have[0][1:], &m)
+	err = json.Unmarshal(have[0][1:], &m)
 	assert.NoError(c.t, err)
 
 	c.eioSessionID, _ = m["sid"].(string)
@@ -366,7 +389,7 @@ func (c *v3PollingClient) grab() (rtn []string) {
 		if i == 0 && len(have[i]) > 1 && have[i][1] == '0' && !c.keep40s {
 			continue
 		}
-		if len(have[i]) > 0 {
+		if len(have[i]) > 0 && string(have[i]) != "2" { // skip the ping becuase it's all about timing... sometimes they will be there sometimes not
 			rtn = append(rtn, string(have[i]))
 		}
 	}

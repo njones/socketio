@@ -18,15 +18,22 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var testingOptionsV2 = []socketio.Option{engineio.WithPingTimeout(2 * time.Second), engineio.WithPingInterval(500 * time.Millisecond)}
+var testingOptionsV2 = []socketio.Option{
+	engineio.WithSessionShave(1 * time.Millisecond),
+	engineio.WithPingTimeout(2 * time.Second),
+	engineio.WithPingInterval(500 * time.Millisecond),
+}
 
 func TestServerV2(t *testing.T) {
 	var opts = []func(*testing.T){}
 	var EIOv = 3
 
 	runWithOptions := map[string]testParamsInFn{
-		"Polling": func(v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
-			return PollingTestV2(opts, EIOv, v1, count, seq, syncOn)
+		"Polling": func(v2 socketio.Server, count int, want map[string][][]string, wait *sync.WaitGroup) testFn {
+			return PollingTestV2(opts, EIOv, v2, count, want, wait)
+		},
+		"Websocket": func(v2 socketio.Server, count int, want map[string][][]string, wait *sync.WaitGroup) testFn {
+			return WebsocketTestV1(opts, EIOv, v2, count, want, wait)
 		},
 	}
 
@@ -34,7 +41,7 @@ func TestServerV2(t *testing.T) {
 		"sending to the client":                                                   SendingToTheClientV2,
 		"sending to all clients except sender":                                    SendingToAllClientsExceptTheSenderV2,
 		"sending to all clients in 'game' room except sender":                     SendingToAllClientsInGameRoomExceptSenderV2,
-		"sending to all clients in 'game1' and/or in 'game2' room, except sender": SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV2,
+		"sending to all clients in 'game1' and/or in 'game2' room, except sender": SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV2,
 		"sending to all clients in 'game' room, including sender":                 SendingToAllClientsInGameRoomIncludingSenderV2,
 		"sending to all clients in namespace 'myNamespace', including sender":     SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV2,
 		"sending to a specific room in a specific namespace, including sender":    SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV2,
@@ -56,7 +63,7 @@ func TestServerV2(t *testing.T) {
 
 }
 
-func PollingTestV2(opts []func(*testing.T), EIOv int, v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
+func PollingTestV2(opts []func(*testing.T), EIOv int, v2 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
 	return func(t *testing.T) {
 		for _, opt := range opts {
 			opt(t)
@@ -65,7 +72,7 @@ func PollingTestV2(opts []func(*testing.T), EIOv int, v1 socketio.Server, count 
 		t.Parallel()
 
 		var (
-			server = httptest.NewServer(v1)
+			server = httptest.NewServer(v2)
 			client = make([]*testClient, count)
 		)
 
@@ -174,7 +181,7 @@ func SendingToAllClientsExceptTheSenderV2(t *testing.T) (socketio.Server, int, m
 			"grab1": {
 				{`42["broadcast","Hello friends!"]`},
 				{`42["broadcast","Hello friends!"]`},
-				{`2`},
+				nil,
 			},
 		}
 		count = len(want["grab1"])
@@ -206,10 +213,10 @@ func SendingToAllClientsInGameRoomExceptSenderV2(t *testing.T) (socketio.Server,
 		want = map[string][][]string{
 			"grab1": {
 				{`42["nice game","let's play a game"]`},
-				{`2`},
+				nil,
 				{`42["nice game","let's play a game"]`},
-				{`2`},
-				{`2`}, // sender...
+				nil,
+				nil, // sender...
 			},
 		}
 		count = len(want["grab1"])
@@ -236,7 +243,7 @@ func SendingToAllClientsInGameRoomExceptSenderV2(t *testing.T) (socketio.Server,
 	return v2, count, want, wait
 }
 
-func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
 		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
@@ -244,18 +251,18 @@ func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV2(t *testing.T) (socket
 		want = map[string][][]string{
 			"grab1": {
 				{`42["nice game","let's play a game (too)"]`},
-				{`2`},
+				nil,
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
-				{`2`},
+				nil,
 				{`42["nice game","let's play a game (too)"]`},
-				{`2`},
+				nil,
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
-				{`2`},
-				{`2`}, // sender...
+				nil,
+				nil, // sender...
 			},
 		}
 		count = len(want["grab1"])
@@ -293,9 +300,9 @@ func SendingToAllClientsInGameRoomIncludingSenderV2(t *testing.T) (socketio.Serv
 		want = map[string][][]string{
 			"grab1": {
 				{`42["big-announcement","the game will start soon"]`},
-				{`2`},
+				nil,
 				{`42["big-announcement","the game will start soon"]`},
-				{`2`},
+				nil,
 				{`42["big-announcement","the game will start soon"]`},
 			},
 		}
@@ -338,9 +345,9 @@ func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV2(t *testing.T) (s
 			},
 			"grab1": {
 				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
-				{`2`},
+				nil,
 				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
-				{`2`},
+				nil,
 				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`}, // 42/myNamespace,["bigger-announcement","the tournament will start soon"]
 			},
 		}
@@ -392,9 +399,9 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV2(t *testing.T)
 			},
 			"grab1": {
 				{`42/myNamespace,["event","message"]`},
-				{`2`},
-				{`2`},
-				{`2`},
+				nil,
+				nil,
+				nil,
 				{`42/myNamespace,["event","message"]`},
 			},
 		}
@@ -575,9 +582,9 @@ func OnEventV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 			},
 			"grab2": {
 				{`42["say goodbye","disconnecting..."]`},
-				{`2`},
+				nil,
 				{`42["say goodbye","disconnecting..."]`},
-				{`2`},
+				nil,
 				{`42["say goodbye","disconnecting..."]`},
 			},
 		}

@@ -24,8 +24,11 @@ func TestServerV4(t *testing.T) {
 	var EIOv = 4
 
 	runWithOptions := map[string]testParamsInFn{
-		"Polling": func(v4 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
-			return PollingTestV4(opts, EIOv, v4, count, seq, syncOn)
+		"Polling": func(v4 socketio.Server, count int, want map[string][][]string, wait *sync.WaitGroup) testFn {
+			return PollingTestV4(opts, EIOv, v4, count, want, wait)
+		},
+		"Websocket": func(v4 socketio.Server, count int, want map[string][][]string, wait *sync.WaitGroup) testFn {
+			return WebsocketTestV3(opts, EIOv, v4, count, want, wait)
 		},
 	}
 
@@ -34,9 +37,9 @@ func TestServerV4(t *testing.T) {
 		"sending to the client":                                                   SendingToTheClientV4,
 		"sending to all clients except sender":                                    SendingToAllClientsExceptTheSenderV4,
 		"sending to all clients in 'game' room except sender":                     SendingToAllClientsInGameRoomExceptSenderV4,
-		"sending to all clients in 'game1' and/or in 'game2' room, except sender": SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV4,
+		"sending to all clients in 'game1' and/or in 'game2' room, except sender": SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV4,
 		"sending to all clients in 'game' room, including sender":                 SendingToAllClientsInGameRoomIncludingSenderV4,
-		"to all clients in room1 and/or room2 except those in room3":              ToAllClientsInRoom1AndOrRoom2ExceptRoom3V4,
+		"to all clients in room1 and/or room2 except those in room3":              SendingToAllClientsInRoom1AndOrRoom2ExceptRoom3V4,
 		"sending to all clients in namespace 'myNamespace', including sender":     SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV4,
 		"sending to a specific room in a specific namespace, including sender":    SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV4,
 		"sending to individual socketid (private message)":                        SendingToIndividualSocketIDPrivateMessageV4,
@@ -245,7 +248,7 @@ func SendingToAllClientsInGameRoomExceptSenderV4(t *testing.T) (socketio.Server,
 	return v4, count, want, wait
 }
 
-func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV4(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV4(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
 		v4   = socketio.NewServerV4(testingOptionsV4...)
 		wait = new(sync.WaitGroup)
@@ -332,7 +335,7 @@ func SendingToAllClientsInGameRoomIncludingSenderV4(t *testing.T) (socketio.Serv
 	return v4, count, want, wait
 }
 
-func ToAllClientsInRoom1AndOrRoom2ExceptRoom3V4(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInRoom1AndOrRoom2ExceptRoom3V4(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
 		v4   = socketio.NewServerV4(testingOptionsV4...)
 		wait = new(sync.WaitGroup)

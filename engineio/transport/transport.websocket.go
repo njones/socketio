@@ -18,7 +18,9 @@ import (
 
 type ctky string
 
+const Websocket Name = "websocket"
 const serverSetupComplete ctky = "server_setup_complete"
+const defaultPingMsg = "probe"
 
 type WebsocketTransport struct {
 	*Transport
@@ -41,13 +43,13 @@ func NewWebsocketTransport(chanBuf int) func(SessionID, Codec) Transporter {
 			t := &WebsocketTransport{
 				Transport: &Transport{
 					id:      id,
-					name:    "websocket",
+					name:    Websocket,
 					codec:   codec,
 					send:    make(chan eiop.Packet, chanBuf),
 					receive: make(chan eiop.Packet, chanBuf),
 				},
 				origin:  []string{"*"},
-				PingMsg: "probe",
+				PingMsg: defaultPingMsg,
 			}
 
 			return t
@@ -215,7 +217,7 @@ Write:
 					start = time.Now()
 				}
 
-				t.codec.PacketEncoder.To(cw).WritePacket(packet)
+				err = t.codec.PacketEncoder.To(cw).WritePacket(packet)
 				cw.Close()
 			}
 		}
@@ -263,7 +265,8 @@ func (t *WebsocketTransport) outgoing(r *http.Request) (err error) {
 			unbuffered.Wait()
 		}
 
-		// - /* blocking */ read a packet off the wire...
+		// - /* blocking */ -//
+		// read a packet off the wire...
 		msgType, cr, err := t.conn.Reader(ctx) // this will close when shutdown() is called.
 		if err != nil {
 			return err
