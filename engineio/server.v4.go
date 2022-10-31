@@ -40,8 +40,8 @@ func (v4 *serverV4) new(opts ...Option) *serverV4 {
 	v4.maxHttpBufferSize = 1e7
 
 	v4.codec = eiot.Codec{
-		PacketEncoder:  eiop.NewPacketEncoderV3,
-		PacketDecoder:  eiop.NewPacketDecoderV3,
+		PacketEncoder:  eiop.NewPacketEncoderV4,
+		PacketDecoder:  eiop.NewPacketDecoderV4,
 		PayloadEncoder: eiop.NewPayloadEncoderV4,
 		PayloadDecoder: eiop.NewPayloadDecoderV4,
 	}

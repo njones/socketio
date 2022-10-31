@@ -2,6 +2,7 @@ package socketio_test
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http/httptest"
@@ -17,15 +18,22 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var testingOptionsV3 = []socketio.Option{engineio.WithPingTimeout(1 * time.Second), engineio.WithPingInterval(500 * time.Millisecond)}
+var testingOptionsV3 = []socketio.Option{
+	engineio.WithSessionShave(1 * time.Millisecond),
+	engineio.WithPingTimeout(1 * time.Second),
+	engineio.WithPingInterval(500 * time.Millisecond),
+}
 
 func TestServerV3(t *testing.T) {
 	var opts = []func(*testing.T){}
 	var EIOv = 4
 
 	runWithOptions := map[string]testParamsInFn{
-		"Polling": func(v3 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
-			return PollingTestV3(opts, EIOv, v3, count, seq, syncOn)
+		"Polling": func(v3 socketio.Server, count int, want map[string][][]string, wait *sync.WaitGroup) testFn {
+			return PollingTestV3(opts, EIOv, v3, count, want, wait)
+		},
+		"Websocket": func(v3 socketio.Server, count int, want map[string][][]string, wait *sync.WaitGroup) testFn {
+			return WebsocketTestV3(opts, EIOv, v3, count, want, wait)
 		},
 	}
 
@@ -34,7 +42,7 @@ func TestServerV3(t *testing.T) {
 		"sending to the client":                                                   SendingToTheClientV3,
 		"sending to all clients except sender":                                    SendingToAllClientsExceptTheSenderV3,
 		"sending to all clients in 'game' room except sender":                     SendingToAllClientsInGameRoomExceptSenderV3,
-		"sending to all clients in 'game1' and/or in 'game2' room, except sender": SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV3,
+		"sending to all clients in 'game1' and/or in 'game2' room, except sender": SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV3,
 		"sending to all clients in 'game' room, including sender":                 SendingToAllClientsInGameRoomIncludingSenderV3,
 		"sending to all clients in namespace 'myNamespace', including sender":     SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV3,
 		"sending to a specific room in a specific namespace, including sender":    SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV3,
@@ -56,7 +64,7 @@ func TestServerV3(t *testing.T) {
 	}
 }
 
-func PollingTestV3(opts []func(*testing.T), EIOv int, v3 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
+func PollingTestV3(opts []func(*testing.T), EIOv int, v3 socketio.Server, count int, want map[string][][]string, syncOn *sync.WaitGroup) testFn {
 	return func(t *testing.T) {
 		for _, opt := range opts {
 			opt(t)
@@ -81,23 +89,23 @@ func PollingTestV3(opts []func(*testing.T), EIOv int, v3 socketio.Server, count 
 			}}
 
 			var queryStr, connStr []string
-
-			if q, ok := seq["connect_query"]; ok {
+			if q, ok := want["connect_query"]; ok {
 				queryStr = q[i]
 			}
-			if c, ok := seq["connect"]; ok {
+			if c, ok := want["connect"]; ok {
 				connStr = c[i]
 			}
 
 			client[i].polling.connect(queryStr, connStr)
 		}
 
-		syncOn.Wait() // waits for all of the events inside of a onConnection to complete...
+		// waits for all of the events inside of a onConnection to complete...
+		syncOn.Wait()
 
 		var x int
 		reqSequence := []string{"send1", "grab1", "send2", "grab2"}
 		for _, reqType := range reqSequence {
-			if request, ok := seq[reqType]; ok && strings.HasPrefix(reqType, "send") {
+			if request, ok := want[reqType]; ok && strings.HasPrefix(reqType, "send") {
 				var packetBuf = new(bytes.Buffer)
 
 				for i, packets := range request {
@@ -119,7 +127,7 @@ func PollingTestV3(opts []func(*testing.T), EIOv int, v3 socketio.Server, count 
 				}
 				continue
 			}
-			if request, ok := seq[reqType]; ok && strings.HasPrefix(reqType, "grab") {
+			if request, ok := want[reqType]; ok && strings.HasPrefix(reqType, "grab") {
 				for i, want := range request {
 					x++
 					have := client[i].polling.grab()
@@ -131,14 +139,106 @@ func PollingTestV3(opts []func(*testing.T), EIOv int, v3 socketio.Server, count 
 
 		syncOn.Wait()
 
-		if xq, ok := seq["connect_query"]; ok {
+		if xq, ok := want["connect_query"]; ok {
 			x += len(xq)
 		}
-		if xc, ok := seq["connect"]; ok {
+		if xc, ok := want["connect"]; ok {
 			x += len(xc)
 		}
 
-		assert.Equal(t, count*len(seq), x) // the wants were actually tested
+		assert.Equal(t, count*len(want), x) // the wants were actually tested
+	}
+}
+
+func WebsocketTestV3(opts []func(*testing.T), EIOv int, vX socketio.Server, count int, want map[string][][]string, syncOn *sync.WaitGroup) func(*testing.T) {
+	return func(t *testing.T) {
+		for _, opt := range opts {
+			opt(t)
+		}
+
+		t.Parallel()
+
+		var (
+			server = httptest.NewServer(vX)
+			client = make([]*testClient, count)
+		)
+
+		defer server.Close()
+
+		for i := 0; i < count; i++ {
+			client[i] = &testClient{websocket: &v3WebsocketClient{
+				t:          t,
+				base:       server.URL,
+				client:     server.Client(),
+				buffer:     new(bytes.Buffer),
+				eioVersion: EIOv,
+			}}
+
+			var queryStr, connStr []string
+			if q, ok := want["connect_query"]; ok {
+				queryStr = q[i]
+			}
+			if c, ok := want["connect"]; ok {
+				connStr = c[i]
+			}
+
+			client[i].websocket.connect(queryStr, connStr)
+		}
+
+		// wait for all onConnection events to complete...
+		syncOn.Wait()
+
+		var x int
+		reqSequence := []string{"send1", "grab1", "send2", "grab2"}
+		for _, reqType := range reqSequence {
+			if request, ok := want[reqType]; ok && strings.HasPrefix(reqType, "send") {
+
+				for i, packets := range request {
+					x++
+					if len(packets) == 0 {
+						continue
+					}
+
+					syncOn.Add(1)
+
+					for _, packet := range packets {
+						time.Sleep(3 * time.Millisecond)
+						// check for binary data and send it as binary
+						// if it's there
+						if len(packet) > 0 && packet[0] == 'b' {
+							bin, err := base64.StdEncoding.DecodeString(packet[1:])
+							if err != nil {
+								panic(err)
+							}
+							client[i].websocket.send(bytes.NewReader(bin))
+							continue
+						}
+						client[i].websocket.send(strings.NewReader(packet))
+					}
+				}
+				continue
+			}
+			if request, ok := want[reqType]; ok && strings.HasPrefix(reqType, "grab") {
+				for i, want := range request {
+					x++
+					have := client[i].websocket.grab()
+					assert.Equal(t, want, have, "[%s] idx: %d", reqType, i)
+				}
+				continue
+			}
+		}
+
+		// wait for all emitted events to complete...
+		syncOn.Wait()
+
+		// check that we hit every "send/grab" that we needed to check...
+		if xq, ok := want["connect_query"]; ok {
+			x += len(xq)
+		}
+		if xc, ok := want["connect"]; ok {
+			x += len(xc)
+		}
+		assert.Equal(t, count*len(want), x)
 	}
 }
 
@@ -182,7 +282,7 @@ func SendingToAllClientsExceptTheSenderV3(t *testing.T) (socketio.Server, int, m
 			"grab1": {
 				{`42["broadcast","Hello friends!"]`},
 				{`42["broadcast","Hello friends!"]`},
-				{`2`},
+				nil,
 			},
 		}
 		count = len(want["grab1"])
@@ -214,10 +314,10 @@ func SendingToAllClientsInGameRoomExceptSenderV3(t *testing.T) (socketio.Server,
 		want = map[string][][]string{
 			"grab1": {
 				{`42["nice game","let's play a game"]`},
-				{`2`},
+				nil,
 				{`42["nice game","let's play a game"]`},
-				{`2`},
-				{`2`}, // sender...
+				nil,
+				nil, // sender...
 			},
 		}
 		count = len(want["grab1"])
@@ -244,7 +344,7 @@ func SendingToAllClientsInGameRoomExceptSenderV3(t *testing.T) (socketio.Server,
 	return v3, count, want, wait
 }
 
-func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -252,18 +352,18 @@ func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV3(t *testing.T) (socket
 		want = map[string][][]string{
 			"grab1": {
 				{`42["nice game","let's play a game (too)"]`},
-				{`2`},
+				nil,
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
-				{`2`},
+				nil,
 				{`42["nice game","let's play a game (too)"]`},
-				{`2`},
+				nil,
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
 				{`42["nice game","let's play a game (too)"]`},
-				{`2`},
-				{`2`}, // sender...
+				nil,
+				nil, // sender...
 			},
 		}
 		count = len(want["grab1"])
@@ -301,9 +401,9 @@ func SendingToAllClientsInGameRoomIncludingSenderV3(t *testing.T) (socketio.Serv
 		want = map[string][][]string{
 			"grab1": {
 				{`42["big-announcement","the game will start soon"]`},
-				{`2`},
+				nil,
 				{`42["big-announcement","the game will start soon"]`},
-				{`2`},
+				nil,
 				{`42["big-announcement","the game will start soon"]`},
 			},
 		}
@@ -346,9 +446,9 @@ func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV3(t *testing.T) (s
 			},
 			"grab1": {
 				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
-				{`2`},
+				nil,
 				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
-				{`2`},
+				nil,
 				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
 			},
 		}
@@ -397,9 +497,9 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV3(t *testing.T)
 			},
 			"grab1": {
 				{`42/myNamespace,["event","message"]`},
-				{`2`},
-				{`2`},
-				{`2`},
+				nil,
+				nil,
+				nil,
 				{`42/myNamespace,["event","message"]`},
 			},
 		}
@@ -576,9 +676,9 @@ func OnEventV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 			},
 			"grab2": {
 				{`42["say goodbye","disconnecting..."]`},
-				{`2`},
+				nil,
 				{`42["say goodbye","disconnecting..."]`},
-				{`2`},
+				nil,
 				{`42["say goodbye","disconnecting..."]`},
 			},
 		}

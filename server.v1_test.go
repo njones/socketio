@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,9 +31,9 @@ func TestServerV1(t *testing.T) {
 		"Polling": func(v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
 			return PollingTestV1(opts, EIOv, v1, count, seq, syncOn)
 		},
-		// "Websocket": func(v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
-		// 	return WebsocketTestV1(opts, EIOv, v1, count, seq, syncOn)
-		// },
+		"Websocket": func(v1 socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) testFn {
+			return WebsocketTestV1(opts, EIOv, v1, count, seq, syncOn)
+		},
 	}
 
 	integration := map[string]testParamsOutFn{
@@ -40,7 +41,7 @@ func TestServerV1(t *testing.T) {
 		"sending to the client":                                                   SendingToTheClientV1,
 		"sending to all clients except sender":                                    SendingToAllClientsExceptTheSenderV1,
 		"sending to all clients in 'game' room except sender":                     SendingToAllClientsInGameRoomExceptSenderV1,
-		"sending to all clients in 'game1' and/or in 'game2' room, except sender": SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV1,
+		"sending to all clients in 'game1' and/or in 'game2' room, except sender": SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV1,
 		"sending to all clients in 'game' room, including sender":                 SendingToAllClientsInGameRoomIncludingSenderV1,
 		"sending to all clients in namespace 'myNamespace', including sender":     SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV1,
 		"sending to a specific room in a specific namespace, including sender":    SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV1,
@@ -138,7 +139,7 @@ func PollingTestV1(opts []func(*testing.T), EIOv int, vX socketio.Server, count 
 	}
 }
 
-func WebsocketTestV1(opts []func(*testing.T), EIOv int, vX socketio.Server, count int, seq map[string][][]string, syncOn *sync.WaitGroup) func(*testing.T) {
+func WebsocketTestV1(opts []func(*testing.T), EIOv int, vX socketio.Server, count int, want map[string][][]string, syncOn *sync.WaitGroup) func(*testing.T) {
 	return func(t *testing.T) {
 		for _, opt := range opts {
 			opt(t)
@@ -164,7 +165,7 @@ func WebsocketTestV1(opts []func(*testing.T), EIOv int, vX socketio.Server, coun
 			}}
 
 			var queryStr []string
-			if q, ok := seq["connect_query"]; ok {
+			if q, ok := want["connect_query"]; ok {
 				queryStr = q[i]
 			}
 			client[i].websocket.connect(queryStr)
@@ -176,9 +177,7 @@ func WebsocketTestV1(opts []func(*testing.T), EIOv int, vX socketio.Server, coun
 		var x int
 		reqSequence := []string{"send1", "grab1", "send2", "grab2"}
 		for _, reqType := range reqSequence {
-			if request, ok := seq[reqType]; ok && strings.HasPrefix(reqType, "send") {
-				var packetBuf = new(bytes.Buffer)
-
+			if request, ok := want[reqType]; ok && strings.HasPrefix(reqType, "send") {
 				for i, packets := range request {
 					x++
 					if len(packets) == 0 {
@@ -186,19 +185,18 @@ func WebsocketTestV1(opts []func(*testing.T), EIOv int, vX socketio.Server, coun
 					}
 
 					syncOn.Add(1)
-					packetBuf.Reset()
 
 					for _, packet := range packets {
-						packetBuf.WriteString(fmt.Sprintf("%d:%s", len(packet), packet))
+						time.Sleep(1 * time.Millisecond)
+						client[i].websocket.send(strings.NewReader(packet))
 					}
-					client[i].polling.send(packetBuf)
 				}
 				continue
 			}
-			if request, ok := seq[reqType]; ok && strings.HasPrefix(reqType, "grab") {
+			if request, ok := want[reqType]; ok && strings.HasPrefix(reqType, "grab") {
 				for i, want := range request {
 					x++
-					have := client[i].polling.grab()
+					have := client[i].websocket.grab()
 					assert.Equal(t, want, have, "[%s] idx: %d", reqType, i)
 				}
 				continue
@@ -209,10 +207,10 @@ func WebsocketTestV1(opts []func(*testing.T), EIOv int, vX socketio.Server, coun
 		syncOn.Wait()
 
 		// check that we hit every "send/grab" that we needed to check...
-		if xq, ok := seq["connect_query"]; ok {
+		if xq, ok := want["connect_query"]; ok {
 			x += len(xq)
 		}
-		assert.Equal(t, count*len(seq), x)
+		assert.Equal(t, count*len(want), x)
 	}
 }
 
@@ -312,7 +310,7 @@ func SendingToAllClientsInGameRoomExceptSenderV1(*testing.T) (socketio.Server, i
 	return v1, count, want, wait
 }
 
-func SendingToAllClientsInGame1AndOrGam2RoomExceptSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV1(*testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
 	var (
 		v1   = socketio.NewServerV1(testingOptionsV1...)
 		wait = new(sync.WaitGroup)
@@ -643,8 +641,8 @@ func OnEventV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 				{`42["say goodbye","disconnecting..."]`},
 			},
 		}
-		count  = len(want["send1"])
-		cnt, n = 0, 0
+		count = len(want["send1"])
+		n     = int64(0)
 	)
 
 	wait.Add(count)
@@ -665,7 +663,8 @@ func OnEventV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 					}
 
 					assert.Equal(t, fmt.Sprintf("an event sent to all connected clients #%d", n), msg)
-					n++
+					atomic.AddInt64(&n, 1)
+
 					return nil
 				}
 			},
@@ -677,7 +676,6 @@ func OnEventV1(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 			v1.In("room").Emit("say goodbye", serialize.String("disconnecting..."))
 		})
 
-		cnt++
 		return nil
 	})
 
