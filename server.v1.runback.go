@@ -94,7 +94,7 @@ func doConnectPacket(v1 *ServerV1) func(SocketID, siot.Socket, *Request) error {
 		v1.setNsp(socket.Namespace)
 
 		if fn, ok := v1.onConnect[socket.Namespace]; ok {
-			return fn(&SocketV1{inSocketV1: v1.inSocketV1, req: req, Connected: true})
+			return fn(&SocketV1{inSocketV1: v1.inSocketV1.clone(), req: req, Connected: true})
 		}
 		return ErrBadOnConnectSocket
 	}

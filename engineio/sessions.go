@@ -3,11 +3,20 @@ package engineio
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	eios "github.com/njones/socketio/engineio/session"
 	eiot "github.com/njones/socketio/engineio/transport"
 )
+
+func loadDuration(addr *time.Duration) time.Duration {
+	return time.Duration(atomic.LoadInt64((*int64)(addr)))
+}
+
+func storeDuration(addr *time.Duration, val time.Duration) {
+	atomic.StoreInt64((*int64)(addr), int64(val))
+}
 
 type mapSessions interface {
 	Set(eiot.Transporter) error
@@ -127,12 +136,12 @@ func (c *lifecycle) WithInterval(ctx context.Context, d time.Duration) context.C
 		return ctx
 	}
 
-	c.id = d
+	storeDuration(&c.id, d)
 	c.i.LoadOrStore(sessionID, time.NewTicker(c.id))
 
 	var interval eios.IntervalChannel = func() <-chan time.Time {
 		if val, ok := c.i.Load(sessionID); ok {
-			val.(*time.Ticker).Reset(c.id)
+			val.(*time.Ticker).Reset(loadDuration(&c.id))
 			return val.(*time.Ticker).C
 		}
 		return nil
@@ -152,12 +161,14 @@ func (c *lifecycle) WithTimeout(ctx context.Context, d time.Duration) context.Co
 		return ctx
 	}
 
-	c.td = d
+	storeDuration(&c.td, d)
 	if val, ok := c.t.Load(sessionID); ok {
+		reset := (loadDuration(&c.td) + loadDuration(&c.id)) - loadDuration(&c.shave)
 		val.(*time.Timer).Stop()
-		val.(*time.Timer).Reset((c.td + c.id) - c.shave)
+		val.(*time.Timer).Reset(reset)
 	} else {
-		c.t.Store(sessionID, time.NewTimer((c.td+c.id)-c.shave))
+		reset := (loadDuration(&c.td) + loadDuration(&c.id)) - loadDuration(&c.shave)
+		c.t.Store(sessionID, time.NewTimer(reset))
 		c.setTimeout(sessionID, time.Now())
 	}
 
@@ -170,8 +181,9 @@ func (c *lifecycle) WithTimeout(ctx context.Context, d time.Duration) context.Co
 
 	x = context.WithValue(x, eios.SessionExtendTimeoutKey, eios.ExtendTimeoutFunc(func() {
 		if val, ok := c.t.Load(sessionID); ok {
+			reset := (loadDuration(&c.td) + loadDuration(&c.id)) - loadDuration(&c.shave)
 			val.(*time.Timer).Stop()
-			val.(*time.Timer).Reset((c.td + c.id) - c.shave)
+			val.(*time.Timer).Reset(reset)
 		}
 	}))
 
