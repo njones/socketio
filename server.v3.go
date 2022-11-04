@@ -43,11 +43,13 @@ func (v3 *ServerV3) new(opts ...Option) Server {
 	v1.run = runV3(v3)
 
 	v1.transport = nmem.NewInMemoryTransport(siop.NewPacketV5)
+	v1.setTransporter(v1.transport)
+
 	v1.protectedEventName = v3ProtectedEventName
 	v1.doConnectPacket = doConnectPacketV3(v3)
 
 	v3.doBinaryAckPacket = doBinaryAckPacket(v1)
-	v3.inSocketV3.prev = v2.inSocketV2
+	v3.inSocketV3.prev = v2.inSocketV2.clone()
 
 	return v3
 }
