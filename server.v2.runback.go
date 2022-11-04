@@ -7,14 +7,18 @@ import (
 
 func doConnectPacketV2(v2 *ServerV2) func(SocketID, siot.Socket, *Request) error {
 	return func(socketID SocketID, socket siot.Socket, req *Request) (err error) {
-		v2.tr().Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))
+		unlock := v2.prev.r()
+		tr := v2.tr()
+		unlock()
+
+		tr.Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))
 
 		v2.setPrefix()
 		v2.setSocketID(socketID)
 		v2.setNsp(socket.Namespace)
 
 		if fn, ok := v2.onConnect[socket.Namespace]; ok {
-			return fn(&SocketV2{inSocketV2: v2.inSocketV2, req: req})
+			return fn(&SocketV2{inSocketV2: v2.inSocketV2.clone(), req: req})
 		}
 		return ErrBadOnConnectSocket
 	}
@@ -65,7 +69,11 @@ func doBinaryEventPacket(v2 *ServerV2) func(SocketID, siot.Socket) error {
 
 func runV2(v2 *ServerV2) func(SocketID, *Request) error {
 	return func(socketID SocketID, req *Request) error {
-		for socket := range v2.tr().Receive(socketID) {
+		unlock := v2.prev.r()
+		tr := v2.tr()
+		unlock()
+
+		for socket := range tr.Receive(socketID) {
 			if err := doV2(v2, socketID, socket, req); err != nil {
 				return err
 			}

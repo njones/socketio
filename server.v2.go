@@ -2,6 +2,7 @@ package socketio
 
 import (
 	"net/http"
+	"sync"
 
 	nmem "github.com/njones/socketio/adaptor/transport/memory"
 	eio "github.com/njones/socketio/engineio"
@@ -34,18 +35,19 @@ func NewServerV2(opts ...Option) *ServerV2 {
 }
 
 func (v2 *ServerV2) new(opts ...Option) Server {
-	v2.prev = (&ServerV1{}).new(opts...).(*ServerV1)
+	v2.prev = (&ServerV1{inSocketV1: inSocketV1{ʟ: new(sync.RWMutex), x: new(sync.Mutex)}}).new(opts...).(*ServerV1)
 	v2.onConnect = make(map[Namespace]onConnectCallbackVersion2)
 
 	v1 := v2.prev
-
 	v1.run = runV2(v2)
 
 	v1.transport = nmem.NewInMemoryTransport(siop.NewPacketV2) // v2 uses the default socketio protocol v3
+	v1.setTransporter(v1.transport)
+
 	v1.doConnectPacket = doConnectPacketV2(v2)
 
 	v2.doBinaryEventPacket = doBinaryEventPacket(v2)
-	v2.inSocketV2.prev = v1.inSocketV1
+	v2.inSocketV2.prev = v1.inSocketV1.clone()
 
 	return v2
 }

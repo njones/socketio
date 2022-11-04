@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -185,7 +187,7 @@ func SendingToAllClientsExceptTheSenderV2(t *testing.T) (socketio.Server, int, m
 			},
 		}
 		count = len(want["grab1"])
-		cnt   = 0
+		cnt   = int64(0)
 	)
 
 	checkCount(t, count)
@@ -194,11 +196,11 @@ func SendingToAllClientsExceptTheSenderV2(t *testing.T) (socketio.Server, int, m
 	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
-		if cnt == (count - 1) {
+		if atomic.LoadInt64(&cnt) == int64(count-1) {
 			socket.Broadcast().Emit("broadcast", serialize.String("Hello friends!"))
 		}
 
-		cnt++
+		atomic.AddInt64(&cnt, 1)
 		return nil
 	})
 
@@ -220,7 +222,7 @@ func SendingToAllClientsInGameRoomExceptSenderV2(t *testing.T) (socketio.Server,
 			},
 		}
 		count = len(want["grab1"])
-		cnt   = 0
+		cnt   = int64(0)
 	)
 
 	checkCount(t, count)
@@ -233,10 +235,10 @@ func SendingToAllClientsInGameRoomExceptSenderV2(t *testing.T) (socketio.Server,
 			socket.Join("game")
 		}
 
-		if cnt == (count - 1) {
+		if atomic.LoadInt64(&cnt) == int64(count-1) {
 			socket.To("game").Emit("nice game", serialize.String("let's play a game"))
 		}
-		cnt++
+		atomic.AddInt64(&cnt, 1)
 		return nil
 	})
 
@@ -266,7 +268,7 @@ func SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV2(t *testing.T) (socke
 			},
 		}
 		count = len(want["grab1"])
-		cnt   = 0
+		cnt   = int64(0)
 	)
 
 	checkCount(t, count)
@@ -282,10 +284,10 @@ func SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV2(t *testing.T) (socke
 			socket.Join("game2")
 		}
 
-		if cnt == (count - 1) {
+		if atomic.LoadInt64(&cnt) == int64(count-1) {
 			socket.In("game1").To("game2").Emit("nice game", serialize.String("let's play a game (too)"))
 		}
-		cnt++
+		atomic.AddInt64(&cnt, 1)
 		return nil
 	})
 
@@ -307,7 +309,7 @@ func SendingToAllClientsInGameRoomIncludingSenderV2(t *testing.T) (socketio.Serv
 			},
 		}
 		count = len(want["grab1"])
-		cnt   = 0
+		cnt   = int64(0)
 	)
 
 	checkCount(t, count)
@@ -320,10 +322,10 @@ func SendingToAllClientsInGameRoomIncludingSenderV2(t *testing.T) (socketio.Serv
 			socket.Join("game")
 		}
 
-		if cnt == (count - 1) {
+		if atomic.LoadInt64(&cnt) == int64(count-1) {
 			v2.To("game").Emit("big-announcement", serialize.String("the game will start soon"))
 		}
-		cnt++
+		atomic.AddInt64(&cnt, 1)
 		return nil
 	})
 
@@ -348,11 +350,11 @@ func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV2(t *testing.T) (s
 				nil,
 				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
 				nil,
-				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`}, // 42/myNamespace,["bigger-announcement","the tournament will start soon"]
+				{`42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
 			},
 		}
 		count = len(want["send1"])
-		cnt   = 0
+		cnt   = int64(0)
 	)
 
 	checkCount(t, count)
@@ -364,18 +366,18 @@ func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV2(t *testing.T) (s
 		return nil
 	})
 
-	var nsCount int
+	var nsCount int64
 	for _, v := range want["send1"] {
 		if v != nil {
-			nsCount++
+			atomic.AddInt64(&nsCount, 1)
 		}
 	}
 
 	v2.Of("myNamespace").OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
-		cnt++
+		atomic.AddInt64(&cnt, 1)
 
-		if cnt == nsCount {
+		if atomic.LoadInt64(&cnt) == atomic.LoadInt64(&nsCount) {
 			v2.Of("myNamespace").Emit("bigger-announcement", serialize.String("the tournament will start soon"))
 		}
 		return nil
@@ -406,7 +408,7 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV2(t *testing.T)
 			},
 		}
 		count = len(want["send1"])
-		cnt   = 0
+		cnt   = int64(0)
 	)
 
 	checkCount(t, count)
@@ -419,22 +421,22 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV2(t *testing.T)
 		return nil
 	})
 
-	var nsCount int
+	var nsCount int64
 	for _, v := range want["send1"] {
 		if v != nil {
-			nsCount++
+			atomic.AddInt64(&nsCount, 1)
 		}
 	}
 
 	v2.Of("myNamespace").OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
-		cnt++
+		atomic.AddInt64(&cnt, 1)
 
-		if cnt == 1 {
+		if atomic.LoadInt64(&cnt) == 1 {
 			socket.Join("room")
 		}
 
-		if cnt == nsCount {
+		if atomic.LoadInt64(&cnt) == atomic.LoadInt64(&nsCount) {
 			socket.Join("room")
 			v2.Of("myNamespace").To("room").Emit("event", serialize.String("message"))
 		}
@@ -458,7 +460,7 @@ func SendingToIndividualSocketIDPrivateMessageV2(t *testing.T) (socketio.Server,
 			},
 		}
 		count = len(want["grab1"])
-		cnt   = 0
+		cnt   = int64(0)
 	)
 
 	checkCount(t, count)
@@ -470,16 +472,16 @@ func SendingToIndividualSocketIDPrivateMessageV2(t *testing.T) (socketio.Server,
 
 	wait.Add(count)
 	v2.OnConnect(func(socket *socketio.SocketV2) error {
-		nextSocketID[(cnt+1)%count] <- socket.ID()
+		nextSocketID[int(atomic.LoadInt64(&cnt)+1)%count] <- socket.ID()
 
 		go func(num int) {
 			defer wait.Done()
 
 			socketID := <-nextSocketID[num]
 			v2.In(string(socketID)).Emit("hey", serialize.String(fmt.Sprintf("I just met you #%d", num)))
-		}(cnt)
+		}(int(atomic.LoadInt64(&cnt)))
 
-		cnt++
+		atomic.AddInt64(&cnt, 1)
 		return nil
 	})
 
@@ -496,7 +498,7 @@ func SendingWithAcknowledgementV2(t *testing.T) (socketio.Server, int, map[strin
 			"send2": {{`431["answer",42]`}},
 		}
 		count = len(want["grab1"])
-		cnt   = 0
+		cnt   = int64(0)
 	)
 
 	checkCount(t, count)
@@ -523,7 +525,7 @@ func SendingWithAcknowledgementV2(t *testing.T) (socketio.Server, int, map[strin
 
 		assert.NoError(t, err)
 
-		cnt++
+		atomic.AddInt64(&cnt, 1)
 		return nil
 	})
 
@@ -545,7 +547,7 @@ func SendingToAllConnectedClientsV2(t *testing.T) (socketio.Server, int, map[str
 			},
 		}
 		count = len(want["grab1"])
-		cnt   = 0
+		cnt   = int64(0)
 	)
 
 	checkCount(t, count)
@@ -554,10 +556,10 @@ func SendingToAllConnectedClientsV2(t *testing.T) (socketio.Server, int, map[str
 	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
-		if cnt == (count - 1) {
+		if atomic.LoadInt64(&cnt) == int64(count-1) {
 			v2.Emit("*", serialize.String("an event sent to all connected clients"))
 		}
-		cnt++
+		atomic.AddInt64(&cnt, 1)
 		return nil
 	})
 
@@ -565,6 +567,7 @@ func SendingToAllConnectedClientsV2(t *testing.T) (socketio.Server, int, map[str
 }
 
 func OnEventV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+	log.Println("start....")
 	var (
 		v2   = socketio.NewServerV2(testingOptionsV2...)
 		wait = new(sync.WaitGroup)
@@ -588,9 +591,10 @@ func OnEventV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 				{`42["say goodbye","disconnecting..."]`},
 			},
 		}
-		count  = len(want["send1"])
-		cnt, n = 0, 0
+		count = len(want["send1"])
+		n     = int64(0)
 	)
+	log.Println("stop....")
 
 	checkCount(t, count)
 
@@ -607,12 +611,12 @@ func OnEventV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 				return func(msg string) error {
 					defer wait.Done()
 
-					if n%2 != 0 {
+					if atomic.LoadInt64(&n)%2 != 0 {
 						socket.Leave("room")
 					}
 
 					assert.Equal(t, fmt.Sprintf("an event sent to all connected clients #%d", n), msg)
-					n++
+					atomic.AddInt64(&n, 1)
 					return nil
 				}
 			},
@@ -624,7 +628,6 @@ func OnEventV2(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 			v2.In("room").Emit("say goodbye", serialize.String("disconnecting..."))
 		})
 
-		cnt++
 		return nil
 	})
 
@@ -641,7 +644,7 @@ func RejectTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]strin
 			"grab1":         {{`42["hello",1]`}, {`44{"message":"not authorized"}`}},
 		}
 		count = len(want["connect_query"])
-		cnt   = 0
+		cnt   = int64(0)
 	)
 
 	checkCount(t, count)
@@ -649,7 +652,7 @@ func RejectTheClientV2(t *testing.T) (socketio.Server, int, map[string][][]strin
 	wait.Add(count)
 	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
-		cnt++
+		atomic.AddInt64(&cnt, 1)
 
 		tf := socket.Request().URL.Query().Get("access")
 		if tf == "true" {
@@ -674,7 +677,7 @@ func SendingBinaryEventFromClientV2(t *testing.T) (socketio.Server, int, map[str
 			},
 		}
 		count  = len(want["send1"])
-		cnt    = 0
+		cnt    = int64(0)
 		expect = []byte{0x01, 0x02, 0x03, 0x04}
 	)
 
@@ -684,7 +687,7 @@ func SendingBinaryEventFromClientV2(t *testing.T) (socketio.Server, int, map[str
 	v2.OnConnect(func(socket *socketio.SocketV2) error {
 		defer wait.Done()
 
-		cnt++
+		atomic.AddInt64(&cnt, 1)
 		return nil
 	})
 
