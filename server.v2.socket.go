@@ -27,7 +27,7 @@ func (v2 *inSocketV2) setNsp(namespace Namespace)    { v2.prev.setNsp(namespace)
 func (v2 *inSocketV2) addID(id siot.SocketID)        { v2.prev.addID(id) }
 func (v2 *inSocketV2) addTo(room Room)               { v2.prev.addTo(room) }
 
-func (v2 inSocketV2) tr() siot.Transporter { v1 := v2.prev; return v1.tr() }
+func (v2 inSocketV2) tr() siot.Transporter { return v2.prev.tr() }
 func (v2 inSocketV2) nsp() Namespace       { return v2.prev.nsp() }
 func (v2 inSocketV2) prefix() string       { return v2.prev.prefix() }
 func (v2 inSocketV2) socketID() SocketID   { return v2.prev.socketID() }

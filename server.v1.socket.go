@@ -3,6 +3,8 @@ package socketio
 import (
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	call "github.com/njones/socketio/callback"
 	siop "github.com/njones/socketio/protocol"
@@ -52,19 +54,44 @@ type inSocketV1 struct {
 
 	onConnect map[Namespace]onConnectCallbackVersion1
 	events    map[Namespace]map[Event]map[SocketID]eventCallback
+
+	o atomic.Value
+	ʟ *sync.RWMutex
+	x *sync.Mutex
+}
+
+func (v1 *inSocketV1) l() func() {
+	v1.ʟ.Lock()
+	return func() { v1.ʟ.Unlock() }
+}
+
+func (v1 *inSocketV1) r() func() {
+	v1.ʟ.RLock()
+	return func() { v1.ʟ.RUnlock() }
 }
 
 func (v1 *inSocketV1) clone() inSocketV1 {
 	// v1.events and v1.onConnect are initialized in the NewServerV1 method
+	defer v1.l()()
+
 	rtn := *v1
 	return rtn
 }
 
-func (v1 *inSocketV1) setIsServer(isServer bool) { v1.isServer = isServer }
-func (v1 *inSocketV1) setIsSender(isSender bool) { v1.isSender = isSender }
-func (v1 *inSocketV1) setSocketID(id SocketID)   { v1._socketID = id }
-func (v1 *inSocketV1) setPrefix()                { v1._socketPrefix = socketIDQuickPrefix() }
+func (v1 *inSocketV1) setTransporter(tr siot.Transporter) {
+	v1.o.Store(tr)
+
+	v1.tr = func() siot.Transporter {
+		return v1.o.Load().(siot.Transporter)
+	}
+}
+func (v1 *inSocketV1) setIsServer(isServer bool) { defer v1.l()(); v1.isServer = isServer }
+func (v1 *inSocketV1) setIsSender(isSender bool) { defer v1.l()(); v1.isSender = isSender }
+func (v1 *inSocketV1) setSocketID(id SocketID)   { defer v1.l()(); v1._socketID = id }
+func (v1 *inSocketV1) setPrefix()                { defer v1.l()(); v1._socketPrefix = socketIDQuickPrefix() }
 func (v1 *inSocketV1) setNsp(namespace Namespace) {
+	defer v1.l()()
+
 	if len(namespace) > 0 {
 		if namespace[0] != '/' {
 			namespace = "/" + namespace
@@ -73,6 +100,8 @@ func (v1 *inSocketV1) setNsp(namespace Namespace) {
 	v1.ns = namespace
 }
 func (v1 *inSocketV1) addID(id SocketID) {
+	defer v1.l()()
+
 	if v1._uniqID == nil {
 		v1._uniqID = make(map[SocketID]struct{})
 	}
@@ -81,16 +110,18 @@ func (v1 *inSocketV1) addID(id SocketID) {
 		v1._uniqID[id] = struct{}{}
 	}
 }
-func (v1 *inSocketV1) addTo(room Room) { v1.to = append(v1.to, room) }
+func (v1 *inSocketV1) addTo(room Room) { defer v1.l()(); v1.to = append(v1.to, room) }
 
 func (v1 inSocketV1) nsp() Namespace {
+	defer v1.r()()
+
 	if v1.ns == "" {
 		v1.ns = "/"
 	}
 	return v1.ns
 }
-func (v1 inSocketV1) socketID() SocketID { return v1._socketID }
-func (v1 inSocketV1) prefix() string     { return v1._socketPrefix }
+func (v1 inSocketV1) socketID() SocketID { defer v1.r()(); return v1._socketID }
+func (v1 inSocketV1) prefix() string     { defer v1.r()(); return v1._socketPrefix }
 
 func (v1 inSocketV1) OnConnect(callback onConnectCallbackVersion1) {
 	v1.onConnect[v1.nsp()] = callback
@@ -109,6 +140,9 @@ func (v1 inSocketV1) On(event Event, callback eventCallback) {
 }
 
 func (v1 inSocketV1) on(event Event, callback eventCallback) {
+	v1.x.Lock()
+	defer v1.x.Unlock()
+
 	if _, ok := v1.events[v1.nsp()]; !ok {
 		v1.events[v1.nsp()] = make(map[string]map[SocketID]eventCallback)
 	}

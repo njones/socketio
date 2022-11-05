@@ -10,10 +10,13 @@ import (
 
 func doConnectPacketV4(v4 *ServerV4) func(SocketID, siot.Socket, *Request) error {
 	return func(socketID SocketID, socket siot.Socket, req *Request) (err error) {
-		transport := v4.tr()
-		transport.Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))
+		unlock := v4.prev.prev.prev.r()
+		tr := v4.tr()
+		unlock()
 
-		stopBuffer := transport.(rawTransport).Transport(socketID).StartBuffer()
+		tr.Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))
+
+		stopBuffer := tr.(rawTransport).Transport(socketID).StartBuffer()
 		defer stopBuffer()
 
 		v4.setPrefix()
@@ -29,7 +32,7 @@ func doConnectPacketV4(v4 *ServerV4) func(SocketID, siot.Socket, *Request) error
 		}
 
 		if fn, ok := v4.onConnect[socket.Namespace]; ok {
-			return fn(&SocketV4{inSocketV4: v4.inSocketV4, req: req, han: h})
+			return fn(&SocketV4{inSocketV4: v4.inSocketV4.clone(), req: req, han: h})
 		}
 
 		return ErrNamespaceNotFound.F(socket.Namespace)
@@ -38,7 +41,11 @@ func doConnectPacketV4(v4 *ServerV4) func(SocketID, siot.Socket, *Request) error
 
 func runV4(v4 *ServerV4) func(SocketID, *Request) error {
 	return func(socketID SocketID, req *Request) error {
-		for socket := range v4.tr().Receive(socketID) {
+		unlock := v4.prev.prev.prev.r()
+		tr := v4.tr()
+		unlock()
+
+		for socket := range tr.Receive(socketID) {
 			if err := doV4(v4, socketID, socket, req); err != nil {
 				return err
 			}
@@ -52,18 +59,22 @@ func doV4(v4 *ServerV4, socketID SocketID, socket siot.Socket, req *Request) err
 
 	switch socket.Type {
 	case siop.ConnectPacket.Byte():
+		unlock := v4.prev.prev.prev.r()
+		tr := v4.tr()
+		unlock()
+
 		if err := v1.doConnectPacket(socketID, socket, req); err != nil {
 			if errors.Is(err, ErrNamespaceNotFound) {
-				v4.tr().Send(socketID, serviceError(fmt.Errorf("%snvalid namespace", "I")), siop.WithNamespace(socket.Namespace), siop.WithType(byte(siop.ConnectErrorPacket)))
+				tr.Send(socketID, serviceError(fmt.Errorf("%snvalid namespace", "I")), siop.WithNamespace(socket.Namespace), siop.WithType(byte(siop.ConnectErrorPacket)))
 				return nil
 			}
-			v4.tr().Send(socketID, serviceError(err), siop.WithType(byte(siop.ConnectErrorPacket)))
+			tr.Send(socketID, serviceError(err), siop.WithType(byte(siop.ConnectErrorPacket)))
 			return nil
 		}
 
 		connectResponse := map[string]interface{}{"sid": socketID.String()}
-		v4.tr().Send(socketID, connectResponse, siop.WithType(siop.ConnectPacket.Byte()), siop.WithNamespace(socket.Namespace))
-		v4.tr().(rawTransport).Transport(socketID).SendBuffer()
+		tr.Send(socketID, connectResponse, siop.WithType(siop.ConnectPacket.Byte()), siop.WithNamespace(socket.Namespace))
+		tr.(rawTransport).Transport(socketID).SendBuffer()
 		return nil
 	}
 	return doV3(v4.prev, socketID, socket, req)

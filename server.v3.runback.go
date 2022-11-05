@@ -9,15 +9,18 @@ import (
 
 func doConnectPacketV3(v3 *ServerV3) func(SocketID, siot.Socket, *Request) error {
 	return func(socketID SocketID, socket siot.Socket, req *Request) (err error) {
-		transport := v3.tr()
-		transport.Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))
+		unlock := v3.prev.prev.r()
+		tr := v3.tr()
+		unlock()
+
+		tr.Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))
 
 		v3.setPrefix()
 		v3.setSocketID(socketID)
 		v3.setNsp(socket.Namespace)
 
 		if fn, ok := v3.onConnect[socket.Namespace]; ok {
-			return fn(&SocketV3{inSocketV3: v3.inSocketV3, req: req})
+			return fn(&SocketV3{inSocketV3: v3.inSocketV3.clone(), req: req})
 		}
 
 		return ErrNamespaceNotFound.F(socket.Namespace)
@@ -50,7 +53,11 @@ func doBinaryAckPacket(v1 *ServerV1) func(SocketID, siot.Socket) error {
 
 func runV3(v3 *ServerV3) func(SocketID, *Request) error {
 	return func(socketID SocketID, req *Request) error {
-		for socket := range v3.tr().Receive(socketID) {
+		unlock := v3.prev.prev.r()
+		tr := v3.tr()
+		unlock()
+
+		for socket := range tr.Receive(socketID) {
 			if err := doV3(v3, socketID, socket, req); err != nil {
 				return err
 			}

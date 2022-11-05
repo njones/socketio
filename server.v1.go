@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 
 	nmem "github.com/njones/socketio/adaptor/transport/memory"
 	eio "github.com/njones/socketio/engineio"
@@ -39,7 +40,7 @@ type ServerV1 struct {
 
 // NewServerV1 returns a new v1.0 SocketIO server
 func NewServerV1(opts ...Option) *ServerV1 {
-	v1 := &ServerV1{}
+	v1 := &ServerV1{inSocketV1: inSocketV1{ʟ: new(sync.RWMutex), x: new(sync.Mutex)}}
 	v1.new(opts...)
 
 	v1.eio = eio.NewServerV2(
@@ -75,7 +76,8 @@ func (v1 *ServerV1) new(opts ...Option) Server {
 	v1.inSocketV1.binary = true   // for the v1 implementation this always is set to true
 	v1.inSocketV1.compress = true // for the v1 implementation this always is set to true
 
-	v1.inSocketV1.tr = func() siot.Transporter { return v1.transport }
+	// v1.inSocketV1.tr = func() siot.Transporter { return v1.transport }
+	v1.inSocketV1.setTransporter(v1.transport)
 
 	return v1
 }
@@ -145,10 +147,11 @@ func (v1 *ServerV1) serveHTTP(w http.ResponseWriter, r *http.Request) (err error
 		return err
 	}
 
-	v1._socketID, err = v1.transport.Add(eioTransport)
+	sid, err := v1.transport.Add(eioTransport)
 	if err != nil {
 		return err
 	}
+	v1.setSocketID(sid)
 
-	return v1.run(v1._socketID, sioRequest(r))
+	return v1.run(sid, sioRequest(r))
 }
