@@ -46,7 +46,10 @@ func (v4 *inSocketV4) setPrefix()                    { v4.prev.setPrefix() }
 func (v4 *inSocketV4) setNsp(namespace Namespace)    { v4.prev.setNsp(namespace) }
 func (v4 *inSocketV4) addID(id siot.SocketID)        { v4.prev.addID(id) }
 func (v4 *inSocketV4) addTo(room Room)               { v4.prev.addTo(room) }
-func (v4 *inSocketV4) addExcept(room Room)           { v4.except = append(v4.except, room) }
+func (v4 *inSocketV4) addExcept(room Room) {
+	defer v4.prev.prev.prev.l()()
+	v4.except = append(v4.except, room)
+}
 
 func (v4 inSocketV4) tr() siot.Transporter { return v4.prev.tr() }
 func (v4 inSocketV4) nsp() Namespace       { return v4.prev.nsp() }

@@ -52,10 +52,12 @@ func (v4 *ServerV4) new(opts ...Option) Server {
 	v1.run = runV4(v4)
 
 	v1.transport = nmem.NewInMemoryTransport(siop.NewPacketV5)
+	v1.setTransporter(v1.transport)
+
 	v1.protectedEventName = v4ProtectedEventName
 	v1.doConnectPacket = doConnectPacketV4(v4)
 
-	v4.inSocketV4.prev = v3.inSocketV3
+	v4.inSocketV4.prev = v3.inSocketV3.clone()
 
 	return v4
 }
