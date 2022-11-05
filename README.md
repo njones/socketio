@@ -72,7 +72,7 @@ _inside of a function_
 
 The following is in no particular order. Please open an Issue for priority or open a PR to contribute to this list.
 
-- [ ] Flesh out all tests
+- [x] Flesh out all tests
 - [ ] Document all public functions
 - [ ] Documentation
 - [ ] Develop a Client 
