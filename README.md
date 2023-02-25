@@ -35,37 +35,45 @@ go get github.com/njones/socketio
 ### A simple example: sending a message out when a client connects
 
 ```go
-    import sio github.com/njones/socketio
-    import eio github.com/njones/socketio/engineio
-    import ser github.com/njones/socketio/serialize
-```
+import (
+	"log"
+	"net/http"
+	"time"
 
-_inside of a function_
+	sio "github.com/njones/socketio"
+	eio "github.com/njones/socketio/engineio"
+	eiot "github.com/njones/socketio/engineio/transport"
+	ser "github.com/njones/socketio/serialize"
+)
 
-```go
-    // use the latest SocketIO (v4) and EngineIO (v4) version 
-    // setting the EngineIO ping interval to 10 seconds
-    server := sio.NewServer(eio.WithPingInterval(10 * time.Second))
+func main() {
+	port := ":3000"
 
-    // use a OnConnect handler for incoming "connection" messages
-    server.OnConnect(func(socket *socketio.SocketV4) error {
+	server := sio.NewServer(
+		eio.WithPingInterval(300*1*time.Millisecond),
+		eio.WithPingTimeout(200*1*time.Millisecond),
+		eio.WithMaxPayload(1000000),
+		eio.WithTransportOption(eiot.WithGovernor(1500*time.Microsecond, 500*time.Microsecond)),
+	)
 
-        // add serializable data to variables
-        // See: https://github.com/njones/socketio/blob/main/serialize/serialize.go for standard serialized types.
-        // Custom types can be serialized with the following interface: 
-        // https://github.com/njones/socketio/blob/7c6c70708442f9e8d4b33991389d9c6d155da699/serialize/serialize.go#L12
-        canYouHear := sio.String("can you hear me?")
-        
-        var questions ser.Int = 1
-        var responses = ser.Int(2)
-        var extra ser.String = "abc"
+	// use a OnConnect handler for incoming "connection" messages
+	server.OnConnect(func(socket *sio.SocketV4) error {
 
-        // send out a message to the hello 
-        socket.Emit("hello", canYouHear, question, responses, extra)
+		canYouHear := ser.String("can you hear me?")
+		extra := ser.String("abc")
 
-        return nil
-    })
+		var questions = ser.Integer(1)
+		var responses = ser.Map(map[string]interface{}{"one": "no"})
 
+		// send out a message to the hello
+		socket.Emit("hello", canYouHear, questions, responses, extra)
+
+		return nil
+	})
+
+	log.Printf("serving port %s...\n", port)
+	log.Fatal(http.ListenAndServe(port, server))
+}
 ```
 
 ## TODO
