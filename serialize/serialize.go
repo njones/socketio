@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"math/bits"
 	"strconv"
 )
@@ -133,8 +134,20 @@ func (x *_int) Unserialize(str string) (err error) {
 	if err != nil {
 		return err
 	}
-	*x = _int(v)
-	return nil
+	switch bits.UintSize {
+	case 64:
+		if v > math.MinInt64 && v < math.MaxInt64 {
+			*x = _int(v)
+		}
+		return nil
+	case 32:
+		if v > math.MinInt32 && v < math.MaxInt32 {
+			*x = _int(v)
+		}
+		return nil
+	}
+
+	return ErrParseOutOfBounds.F("int", bits.UintSize)
 }
 func (x *_int) Interface() (v interface{})   { return int(*x) }
 func (x _intParam) Unserialize(string) error { return nil }
@@ -182,8 +195,19 @@ func (x *_uint) Unserialize(str string) (err error) {
 	if err != nil {
 		return err
 	}
-	*x = _uint(v)
-	return nil
+	switch bits.UintSize {
+	case 64:
+		if v > 0 && v < math.MaxUint64 {
+			*x = _uint(v)
+		}
+		return nil
+	case 32:
+		if v > 0 && v < math.MaxUint32 {
+			*x = _uint(v)
+		}
+		return nil
+	}
+	return ErrParseOutOfBounds.F("uint", bits.UintSize)
 }
 func (x *_uint) Interface() (v interface{})   { return uint(*x) }
 func (x _uintParam) Unserialize(string) error { return nil }
