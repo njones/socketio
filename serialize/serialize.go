@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math/bits"
 	"strconv"
 )
 
@@ -128,7 +129,7 @@ func Integer(v int) *_int                          { x := _int(v); return &x }
 func (x *_int) String() (str string)               { str, _ = x.Serialize(); return }
 func (x *_int) Serialize() (str string, err error) { return stringify(x), nil }
 func (x *_int) Unserialize(str string) (err error) {
-	v, err := strconv.ParseInt(str, 10, 64)
+	v, err := strconv.ParseInt(str, 10, bits.UintSize)
 	*x = _int(v)
 	return err
 }
@@ -174,7 +175,8 @@ func Uinteger(v uint) *_uint                        { x := _uint(v); return &x }
 func (x *_uint) String() (str string)               { str, _ = x.Serialize(); return }
 func (x *_uint) Serialize() (str string, err error) { return stringify(x), nil }
 func (x *_uint) Unserialize(str string) (err error) {
-	v, err := strconv.ParseUint(str, 10, 64)
+	v, err := strconv.ParseUint(str, 10, bits.UintSize)
+
 	*x = _uint(v)
 	return err
 }
