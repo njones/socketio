@@ -9,14 +9,14 @@ import (
 )
 
 type rdrErr interface {
-	OnErr(errs.String)
-	OnErrF(errs.String, ...interface{})
+	OnErr(error)
+	OnErrF(errs.StringF, ...interface{})
 }
 
 type rdrCondErr interface {
 	rdrCondBool
-	OnErr(errs.String) rdrCondBool
-	OnErrF(errs.String, ...interface{}) rdrCondBool
+	OnErr(error) rdrCondBool
+	OnErrF(errs.StringF, ...interface{}) rdrCondBool
 }
 
 type rdrCondBool interface {
@@ -40,15 +40,15 @@ func (rdr *Reader) ConvertErr(from, to error) *Reader {
 	}
 	return rdr
 }
-func (rdr *Reader) OnErr(errs.String)                  {}
-func (rdr *Reader) OnErrF(errs.String, ...interface{}) {}
-func (rdr *Reader) IsErr() bool                        { return rdr.err != nil }
-func (rdr *Reader) IsNotErr() bool                     { return rdr.err == nil }
-func (rdr *Reader) Read(p []byte) (n int, err error)   { return rdr.r.Read(p) }
+func (rdr *Reader) OnErr(error)                         {}
+func (rdr *Reader) OnErrF(errs.StringF, ...interface{}) {}
+func (rdr *Reader) IsErr() bool                         { return rdr.err != nil }
+func (rdr *Reader) IsNotErr() bool                      { return rdr.err == nil }
+func (rdr *Reader) Read(p []byte) (n int, err error)    { return rdr.r.Read(p) }
 
 type readerCond struct{ *Reader }
 
-func (rdr readerCond) OnErr(errs.String) rdrCondBool                  { return rdr }
-func (rdr readerCond) OnErrF(errs.String, ...interface{}) rdrCondBool { return rdr }
+func (rdr readerCond) OnErr(error) rdrCondBool                         { return rdr }
+func (rdr readerCond) OnErrF(errs.StringF, ...interface{}) rdrCondBool { return rdr }
 
 func NewReader(r io.Reader) *Reader { return &Reader{r: bufio.NewReader(r)} }

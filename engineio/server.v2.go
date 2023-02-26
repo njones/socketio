@@ -113,7 +113,7 @@ func (v2 *serverV2) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 HandleError:
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrBadRequestMethod):
+		case errors.Is(err, ErrRequestHTTPMethod):
 			return
 		}
 		return
@@ -136,18 +136,18 @@ func (v2 *serverV2) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot
 		}
 		fallthrough
 	default:
-		return nil, ErrBadRequestMethod
+		return nil, ErrRequestHTTPMethod
 	}
 
 	eioVersion := eioVersionFrom(r)
 	server, ok := v2.servers[eioVersion]
 	if !ok || eioVersion == "" {
-		return nil, ErrNoEIOVersion
+		return nil, ErrUnknownEIOVersion
 	}
 
 	transportName := transportNameFrom(r)
 	if _, ok := v2.transports[transportName]; !ok || transportName == "" {
-		return nil, ErrNoTransport
+		return nil, ErrUnknownTransport
 	}
 
 	ctx := r.Context()

@@ -133,7 +133,7 @@ func (v1 inSocketV1) OnDisconnect(callback func(string)) {
 
 func (v1 inSocketV1) On(event Event, callback eventCallback) {
 	if _, ok := v1.protectedEventName[event]; ok {
-		v1.on(event, call.ErrorWrap(func() error { return ErrInvalidEventName.F(event) }))
+		v1.on(event, call.ErrorWrap(func() error { return ErrUnsupportedEventName.F(event) }))
 		return
 	}
 	v1.on(event, callback)
@@ -208,7 +208,7 @@ func (v1 inSocketV1) Emit(event Event, data ...Data) error {
 	for _, toRoom := range v1.to {
 		rooms, err := transport.Sockets(v1.nsp()).FromRoom(toRoom)
 		if err != nil {
-			return ErrFromRoom.F(err)
+			return ErrFromRoomFailed.F(err)
 		}
 
 		for _, id := range rooms {

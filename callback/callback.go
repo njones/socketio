@@ -12,18 +12,18 @@ import (
 type ErrorWrap func() error
 
 func (fn ErrorWrap) Callback(data ...interface{}) error { return fn() }
-func (ErrorWrap) Serialize() (string, error)            { return "", ErrStubSerialize }
-func (ErrorWrap) Unserialize(string) error              { return ErrStubUnserialize }
+func (ErrorWrap) Serialize() (string, error)            { return "", ErrUnimplementedSerialize }
+func (ErrorWrap) Unserialize(string) error              { return ErrUnimplementedUnserialize }
 
 type FuncAny func(...interface{}) error
 
 func (fn FuncAny) Callback(v ...interface{}) error { return fn(v...) }
-func (FuncAny) Serialize() (string, error)         { return "", ErrStubSerialize }
-func (FuncAny) Unserialize(string) error           { return ErrStubUnserialize }
+func (FuncAny) Serialize() (string, error)         { return "", ErrUnimplementedSerialize }
+func (FuncAny) Unserialize(string) error           { return ErrUnimplementedUnserialize }
 
 type FuncAnyAck func(...interface{}) []seri.Serializable
 
-func (fn FuncAnyAck) Callback(v ...interface{}) error { return ErrStubSerialize }
+func (fn FuncAnyAck) Callback(v ...interface{}) error { return ErrUnimplementedSerialize }
 func (fn FuncAnyAck) CallbackAck(v ...interface{}) []interface{} {
 	slice := fn(v...)
 	out := make([]interface{}, len(v))
@@ -34,8 +34,8 @@ func (fn FuncAnyAck) CallbackAck(v ...interface{}) []interface{} {
 	}
 	return out
 }
-func (FuncAnyAck) Serialize() (string, error) { return "", ErrStubSerialize }
-func (FuncAnyAck) Unserialize(string) error   { return ErrStubUnserialize }
+func (FuncAnyAck) Serialize() (string, error) { return "", ErrUnimplementedSerialize }
+func (FuncAnyAck) Unserialize(string) error   { return ErrUnimplementedUnserialize }
 
 type FuncString func(string)
 
@@ -50,8 +50,8 @@ func (fn FuncString) Callback(v ...interface{}) error {
 	}
 	return nil
 }
-func (FuncString) Serialize() (string, error) { return "", ErrStubSerialize }
-func (FuncString) Unserialize(string) error   { return ErrStubUnserialize }
+func (FuncString) Serialize() (string, error) { return "", ErrUnimplementedSerialize }
+func (FuncString) Unserialize(string) error   { return ErrUnimplementedUnserialize }
 
 type Wrap struct {
 	Func       func() interface{} // func([T]...) error
@@ -76,15 +76,15 @@ func (fn Wrap) Callback(data ...interface{}) (err error) {
 	f := reflect.ValueOf(fn.Func())
 
 	if len(data) != f.Type().NumIn() {
-		return ErrInvalidDataInParams
+		return ErrUnexpectedDataInParams.F(len(data), f.Type().NumIn())
 	}
 
 	if len(fn.Parameters) != f.Type().NumIn() {
-		return ErrInvalidFuncInParams
+		return ErrUnexpectedFuncInParams.F(len(fn.Parameters), f.Type().NumIn())
 	}
 
 	if f.Type().NumOut() != 1 {
-		return ErrSingleOutParam
+		return ErrUnexpectedSingleOutParam.F(f.Type().NumOut())
 	}
 
 	type inter interface{ Interface() interface{} }
@@ -119,5 +119,5 @@ func (fn Wrap) Callback(data ...interface{}) (err error) {
 	return nil
 }
 
-func (Wrap) Serialize() (string, error) { return "", ErrStubSerialize }
-func (Wrap) Unserialize(string) error   { return ErrStubUnserialize }
+func (Wrap) Serialize() (string, error) { return "", ErrUnimplementedSerialize }
+func (Wrap) Unserialize(string) error   { return ErrUnimplementedUnserialize }

@@ -35,12 +35,12 @@ func (rdr *Reader) CopyN(w io.Writer, n int64) rdrErr {
 
 type onRdrErr struct{ *Reader }
 
-func (e onRdrErr) OnErr(err errs.String) {
+func (e onRdrErr) OnErr(err error) {
 	if e.err != nil {
 		e.err = err
 	}
 }
-func (e onRdrErr) OnErrF(err errs.String, v ...interface{}) {
+func (e onRdrErr) OnErrF(err errs.StringF, v ...interface{}) {
 	if e.err != nil {
 		e.err = err.F(v...)
 	}
@@ -48,12 +48,12 @@ func (e onRdrErr) OnErrF(err errs.String, v ...interface{}) {
 
 type condErr struct{ onRdrErr }
 
-func (e condErr) OnErr(err errs.String) rdrCondBool {
+func (e condErr) OnErr(err error) rdrCondBool {
 	e.onRdrErr.OnErr(err)
 	return e
 }
 
-func (e condErr) OnErrF(err errs.String, v ...interface{}) rdrCondBool {
+func (e condErr) OnErrF(err errs.StringF, v ...interface{}) rdrCondBool {
 	e.onRdrErr.OnErrF(err, v...)
 	return e
 }

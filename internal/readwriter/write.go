@@ -8,8 +8,8 @@ import (
 )
 
 type wtrErr interface {
-	OnErr(errs.String)
-	OnErrF(errs.String, ...interface{})
+	OnErr(error)
+	OnErrF(errs.StringF, ...interface{})
 }
 
 type Writer struct {
@@ -26,8 +26,8 @@ func (wtr *Writer) Err() error {
 	}
 	return wtr.err
 }
-func (wtr *Writer) OnErr(errs.String)                  {}
-func (wtr *Writer) OnErrF(errs.String, ...interface{}) {}
+func (wtr *Writer) OnErr(error)                         {}
+func (wtr *Writer) OnErrF(errs.StringF, ...interface{}) {}
 
 func (wtr *Writer) Write(p []byte) (n int, err error) { return wtr.w.Write(p) }
 

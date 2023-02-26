@@ -3,9 +3,9 @@ package transport
 import erro "github.com/njones/socketio/internal/errors"
 
 const (
-	ErrTransportDecode   erro.String = "[%s] transport decode: %w"
-	ErrTransportEncode   erro.String = "[%s] transport encode: %w"
-	ErrUnsupportedMethod erro.String = "%s not supported"
-	ErrCloseSocket       erro.String = "close socket"
-	ErrTimeoutSocket     erro.String = "socket timeout"
+	ErrDecodeFailed        erro.StringF = "failed to decode the %q transport:: %w"
+	ErrEncodeFailed        erro.StringF = "failed to encode the %q transport:: %w"
+	ErrUnimplementedMethod erro.StringF = "unimplemented %s method"
+	ErrCloseSocket         erro.String  = "socket: closed"
+	ErrTimeoutSocket       erro.String  = "socket: timeout"
 )

@@ -7,26 +7,23 @@ import (
 )
 
 const (
-	ErrNoTransport        erro.String = "transport unknown"
-	ErrNoSessionID        erro.String = "session id unknown"
-	ErrNoEIOVersion       erro.String = "eio version unknown"
-	ErrBadHandshakeMethod erro.String = "bad handshake method"
-	ErrBadRequestMethod   erro.String = "bad http request method"
-	ErrURIPath            erro.String = "bad URI path"
-	ErrTransportRun       erro.String = "bad transport run: %w"
-	ErrPayloadEncode      erro.String = "bad payload encode: %w"
+	ErrUnknownTransport  erro.String = "unknown transport"
+	ErrUnknownSessionID  erro.String = "unknown session id"
+	ErrUnknownEIOVersion erro.String = "unknown engineio version"
+	ErrRequestHTTPMethod erro.String = "invalid request, an unimplemented HTTP method"
+	ErrURIPath           erro.String = "invalid URI path, the prefix is not found"
+
+	EOH erro.String = "End Of Handshake"
+	IOR erro.String = "Is OPTION Request"
 )
 
 const HTTPStatusError400 httpErrorStatus = 400
 
-var ErrBadUpgrade = httpError{400, "transport upgrade error"}
-
-const EOH erro.String = "end of handshake"
-const IOR erro.String = "is OPTION request"
+var ErrBadUpgrade = httpError{400, "failed to upgrade transport"}
 
 type httpErrorStatus int
 
-func (e httpErrorStatus) Error() string { return fmt.Sprintf("http error: %d", e) }
+func (e httpErrorStatus) Error() string { return fmt.Sprintf("HTTP status: %d", e) }
 
 type httpError struct {
 	status int

@@ -37,23 +37,23 @@ func (dec *PacketDecoderV2) Decode(packet *PacketV2) error {
 	switch packetType := packet.T; packetType {
 	case OpenPacket:
 		var data HandshakeV2
-		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data).OnErrF(ErrHandshakeDecode, "v2", dec.read.Err())
+		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data).OnErrF(ErrDecodeHandshakeFailed, dec.read.Err(), kv(ver, "v2"))
 		if dec.read.IsNotErr() {
 			packet.D = &data
 		}
 	case MessagePacket:
 		var data = new(strings.Builder)
-		dec.read.Copy(data).OnErrF(ErrPacketDecode, "v2", dec.read.Err())
+		dec.read.Copy(data).OnErrF(ErrDecodePacketFailed, dec.read.Err(), kv(ver, "v2"))
 		packet.D = data.String()
 	case PingPacket, PongPacket:
 		var data = new(strings.Builder)
-		dec.read.Copy(data).OnErrF(ErrPacketDecode, "v2", dec.read.Err())
+		dec.read.Copy(data).OnErrF(ErrDecodePacketFailed, dec.read.Err(), kv(ver, "v2"))
 		if data.Len() > 0 {
 			packet.D = data.String()
 		}
 	case ClosePacket, UpgradePacket, NoopPacket:
 		var data = new(strings.Builder)
-		dec.read.Copy(data).OnErrF(ErrPacketDecode, "v2", dec.read.Err())
+		dec.read.Copy(data).OnErrF(ErrDecodePacketFailed, dec.read.Err(), kv(ver, "v2"))
 	default:
 		return fmt.Errorf("bad packet type: %T", packetType)
 	}
@@ -62,7 +62,7 @@ func (dec *PacketDecoderV2) Decode(packet *PacketV2) error {
 }
 
 func (dec *PacketDecoderV2) readPacketType(packet io.Writer, r io.Reader) error {
-	dec.read.CopyN(packet, 1).OnErrF(ErrPacketDecode, "v2", dec.read.Err())
+	dec.read.CopyN(packet, 1).OnErrF(ErrDecodePacketFailed, dec.read.Err(), kv(ver, "v2"))
 	return dec.read.Err()
 }
 
@@ -80,31 +80,31 @@ func (enc *PacketEncoderV2) Encode(packet PacketV2) (err error) {
 			if data.Upgrades == nil {
 				data.Upgrades = []string{}
 			}
-			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrHandshakeEncode, "v2", enc.write)
-			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrHandshakeEncode, "v2", enc.write)
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrEncodeHandshakeFailed, enc.write, kv(ver, "v2"))
+			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrEncodeHandshakeFailed, enc.write, kv(ver, "v2"))
 		default:
-			return ErrInvalidHandshake.F("v2")
+			return ErrUnexpectedHandshake.F("*HandshakeV2", data)
 		}
 	case MessagePacket, PingPacket, PongPacket:
 		switch data := packet.D.(type) {
 		case nil:
-			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrEncodePacketFailed, enc.write, kv(ver, "v2"))
 		case string:
-			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
-			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write)
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrEncodePacketFailed, enc.write, kv(ver, "v2"))
+			enc.write.Encode(data).OnErrF(ErrEncodePacketFailed, enc.write, kv(ver, "v2"))
 		case []byte:
-			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
-			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write)
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrEncodePacketFailed, enc.write, kv(ver, "v2"))
+			enc.write.Encode(data).OnErrF(ErrEncodePacketFailed, enc.write, kv(ver, "v2"))
 		case io.WriterTo:
-			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
-			enc.write.Encode(data).OnErrF(ErrPacketEncode, "v2", enc.write)
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrEncodePacketFailed, enc.write, kv(ver, "v2"))
+			enc.write.Encode(data).OnErrF(ErrEncodePacketFailed, enc.write, kv(ver, "v2"))
 		default:
-			return ErrInvalidPacketData.F(fmt.Sprintf("unexpected data type of: %T", data))
+			return ErrUnexpectedPacketData.F(fmt.Sprintf("unexpected data type of: %T", data))
 		}
 	case ClosePacket, UpgradePacket, NoopPacket:
-		enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v2", enc.write)
+		enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrEncodePacketFailed, enc.write, kv(ver, "v2"))
 	default:
-		return ErrInvalidPacketType.F(fmt.Sprintf("unexpected packet type of: %s", packet.T))
+		return ErrUnexpectedPacketType.F(fmt.Sprintf("unexpected packet type of: %s", packet.T))
 	}
 
 	return enc.write.Err()

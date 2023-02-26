@@ -49,7 +49,7 @@ func (x *packetDataString) Read(p []byte) (n int, err error) {
 	n = copy(p, data)
 
 	if n < len(data) { // this means there was no more room
-		return n, ErrOnReadSoBuffer.BufferF("string data", data[n:], ErrShortRead)
+		return n, ErrReadUseBuffer.BufferF("string data", data[n:], ErrShortRead)
 	}
 
 	return n, err
@@ -95,7 +95,7 @@ func (x *packetDataArray) Len() (n int) {
 func (x *packetDataArray) Read(p []byte) (n int, err error) {
 	if len(x.x) == 0 {
 		// always return an error, because this could be empty or just a view of an empty array
-		return 0, ErrOnReadSoBuffer.BufferF("binary data array", []byte("[]"), ErrEmptyDataArray)
+		return 0, ErrReadUseBuffer.BufferF("binary data array", []byte("[]"), ErrEmptyDataArray)
 	}
 
 	n = copy(p, "[")
@@ -122,12 +122,12 @@ func (x *packetDataArray) read(p []byte) (n int, err error) {
 				break // from switch...
 			}
 			if data, err = x.marshalBinary(num, v); err != nil {
-				return n, ErrBadBinaryMarshal.F(err).KV("array", "binary")
+				return n, ErrMarshalBinaryDataFailed.F(err).KV("array", "binary")
 			}
 			num++
 		default:
 			if data, err = json.Marshal(val); err != nil {
-				return n, ErrBadMarshal.F(err).KV("array", "binary")
+				return n, ErrMarshalDataFailed.F(err).KV("array", "binary")
 			}
 		}
 
@@ -143,9 +143,9 @@ func (x *packetDataArray) read(p []byte) (n int, err error) {
 
 		if nx < len(data) {
 			if err != nil {
-				return n, ErrOnReadSoBuffer.BufferF("binary data array", data[nx:], err, ErrShortRead)
+				return n, ErrReadUseBuffer.BufferF("binary data array", data[nx:], err, ErrShortRead)
 			}
-			return n, ErrOnReadSoBuffer.BufferF("binary data array", data[nx:], ErrShortRead)
+			return n, ErrReadUseBuffer.BufferF("binary data array", data[nx:], ErrShortRead)
 		}
 	}
 
@@ -160,7 +160,7 @@ func (x *packetDataArray) Write(p []byte) (n int, err error) {
 	if x.unmarshalBinary != nil {
 		n, err = len(p), x.unmarshalBinary(p, &x.x)
 		if err != nil {
-			ErrBadUnmarshal.F(err).KV("array", "binary")
+			ErrUnmarshalDataFailed.F(err).KV("array", "binary")
 		}
 	}
 
@@ -200,18 +200,18 @@ func (x packetDataObject) Len() (n int) {
 func (x *packetDataObject) Read(p []byte) (n int, err error) {
 	if len(x.x) == 0 {
 		// always return an error, because this could be empty or just a view of an empty array
-		return 0, ErrOnReadSoBuffer.BufferF("binary data object", []byte("{}"), ErrEmptyDataArray)
+		return 0, ErrReadUseBuffer.BufferF("binary data object", []byte("{}"), ErrEmptyDataArray)
 	}
 
 	data, err := json.Marshal(packetDataObjectMarshal{x: x.x, marshalBinary: x.marshalBinary})
 	if err != nil {
-		return n, ErrBadMarshal.F(err).KV("object", "binary")
+		return n, ErrMarshalDataFailed.F(err).KV("object", "binary")
 	}
 
 	n = copy(p, data)
 
 	if n < len(data) {
-		return n, ErrOnReadSoBuffer.BufferF("binary data object", data[n:], ErrShortRead) // PacketError{str: "buffer binary data object for read", buffer: data[n:], errs: []error{ErrShortRead}}
+		return n, ErrReadUseBuffer.BufferF("binary data object", data[n:], ErrShortRead) // PacketError{str: "buffer binary data object for read", buffer: data[n:], errs: []error{ErrShortRead}}
 	}
 
 	return n, err
@@ -225,7 +225,7 @@ func (x *packetDataObject) Write(p []byte) (n int, err error) {
 	if x.unmarshalBinary != nil {
 		n, err = len(p), x.unmarshalBinary(p, &x.x)
 		if err != nil {
-			ErrBadUnmarshal.F(err).KV("object", "binary")
+			ErrUnmarshalDataFailed.F(err).KV("object", "binary")
 		}
 	}
 

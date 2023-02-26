@@ -28,7 +28,7 @@ func (dec *PacketDecoderV4) Decode(packet *PacketV4) error {
 	}
 
 	if packet.T == 0 && !packet.isOpenPacket {
-		if dec.read.IsNotErr() && dec.read.ConditionalErr(dec.readPacketType(&packet.T, dec.read)).OnErrF(ErrPacketDecode, "v4", dec.read.Err()).IsNotErr() {
+		if dec.read.IsNotErr() && dec.read.ConditionalErr(dec.readPacketType(&packet.T, dec.read)).OnErrF(ErrDecodePacketFailed, dec.read.Err(), kv(ver, "v4")).IsNotErr() {
 			packet.isOpenPacket = (packet.T == 0)
 			defer func() { packet.isOpenPacket = false }() // always clear at the end...
 		}
@@ -37,14 +37,14 @@ func (dec *PacketDecoderV4) Decode(packet *PacketV4) error {
 	switch packet.T {
 	case OpenPacket:
 		var data HandshakeV4
-		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data).OnErrF(ErrHandshakeDecode, "v4", dec.read.Err())
+		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data).OnErrF(ErrDecodeHandshakeFailed, dec.read.Err())
 		if dec.read.IsNotErr() {
 			packet.D = &data
 		}
 		return dec.read.Err()
 	case BinaryPacket:
 		var data = new(bytes.Buffer)
-		dec.read.SetDecoder(_packetBase64Decoder(base64.NewDecoder)).Decode(data).OnErrF(ErrPacketDecode, "v4", dec.read.Err())
+		dec.read.SetDecoder(_packetBase64Decoder(base64.NewDecoder)).Decode(data).OnErrF(ErrDecodePacketFailed, dec.read.Err(), kv(ver, "v4"))
 		packet.IsBinary = true
 		packet.D = (io.Reader)(data)
 		return dec.read.Err()
@@ -52,7 +52,7 @@ func (dec *PacketDecoderV4) Decode(packet *PacketV4) error {
 
 	var v3 = packet.PacketV3
 	if dec.read.IsNotErr() {
-		dec.read.ConditionalErr(dec.PacketDecoderV3.Decode(&v3)).OnErrF(ErrPacketDecode, "v4", dec.read.Err())
+		dec.read.ConditionalErr(dec.PacketDecoderV3.Decode(&v3)).OnErrF(ErrDecodePacketFailed, dec.read.Err(), kv(ver, "v4"))
 		packet.D = v3.D
 	}
 
@@ -74,19 +74,19 @@ func (enc *PacketEncoderV4) Encode(packet PacketV4) (err error) {
 			if data.Upgrades == nil {
 				data.Upgrades = []string{}
 			}
-			enc.write.Bytes(packet.T.Bytes()).OnErr(ErrPacketEncode)
-			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrHandshakeEncode, "v4", enc.write.Err())
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrEncodePacketFailed)
+			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrEncodeHandshakeFailed, enc.write.Err(), kv(ver, "v4"))
 		default:
-			return ErrInvalidHandshake.F("v4")
+			return ErrUnexpectedHandshake.F("*HandshakeV4", data)
 		}
 		return enc.write.Err()
 	case BinaryPacket:
-		enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrPacketEncode, "v4", enc.write.Err())
+		enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrEncodePacketFailed, enc.write.Err(), kv(ver, "v4"))
 		switch data := packet.D.(type) {
 		case []byte:
-			enc.write.UseEncoder(_packetBase64encoder(base64.NewEncoder)).Encode(data).OnErrF(ErrPacketEncode, "v4", enc.write.Err())
+			enc.write.UseEncoder(_packetBase64encoder(base64.NewEncoder)).Encode(data).OnErrF(ErrEncodePacketFailed, enc.write.Err(), kv(ver, "v4"))
 		case io.Reader:
-			enc.write.UseEncoder(_packetBase64encoder(base64.NewEncoder)).Encode(data).OnErrF(ErrPacketEncode, "v4", enc.write.Err())
+			enc.write.UseEncoder(_packetBase64encoder(base64.NewEncoder)).Encode(data).OnErrF(ErrEncodePacketFailed, enc.write.Err(), kv(ver, "v4"))
 		default:
 			return fmt.Errorf("bad packet binary encode type: %T", data)
 		}

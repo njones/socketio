@@ -219,7 +219,7 @@ func TestPacketV2(t *testing.T) {
 			))
 
 			asString := `0{"sid":"abc1`
-			err := ErrHandshakeDecode.F("v2", io.ErrUnexpectedEOF)
+			err := ErrDecodeHandshakeFailed.F(io.ErrUnexpectedEOF).KV(ver, "v2")
 			return PacketV2{}, asString, err
 		},
 		"Err PacketType": func(*testing.T) (PacketV2, string, error) {
@@ -231,7 +231,7 @@ func TestPacketV2(t *testing.T) {
 			))
 
 			asPacket := PacketV2{Packet{T: 200, D: nil}}
-			err := ErrInvalidPacketType
+			err := ErrUnexpectedPacketType
 			return asPacket, "", err
 		},
 	}

@@ -127,10 +127,10 @@ func (v1 *ServerV1) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		case
 			errors.Is(err, eio.HTTPStatusError400),
-			errors.Is(err, eio.ErrNoSessionID),
-			errors.Is(err, eio.ErrNoEIOVersion),
-			errors.Is(err, eio.ErrNoTransport),
-			errors.Is(err, eio.ErrBadRequestMethod):
+			errors.Is(err, eio.ErrUnknownSessionID),
+			errors.Is(err, eio.ErrUnknownEIOVersion),
+			errors.Is(err, eio.ErrUnknownTransport),
+			errors.Is(err, eio.ErrRequestHTTPMethod):
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}

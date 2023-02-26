@@ -172,7 +172,7 @@ func packetDataArrayUnmarshalV3(incoming *binaryStreamIn) func([]byte, interface
 	return func(data_ []byte, vw interface{}) error {
 		err := json.Unmarshal(data_, vw)
 		if err != nil {
-			return ErrBadInitialFieldUnmarshal.F(err)
+			return ErrUnmarshalInitialFieldFailed.F(err)
 		}
 
 		// replace your binary data...
@@ -212,7 +212,7 @@ func packetDataObjectUnmarshalV3(incoming *binaryStreamIn) func([]byte, interfac
 	return func(data_ []byte, vw interface{}) error {
 		err := json.Unmarshal(data_, vw)
 		if err != nil {
-			return ErrBadInitialFieldUnmarshal.F(err)
+			return ErrUnmarshalInitialFieldFailed.F(err)
 		}
 
 		// replace your binary data...

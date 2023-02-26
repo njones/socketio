@@ -6,6 +6,6 @@ import (
 
 // All of the possible errors the map transport can return
 const (
-	ErrInvalidSocketTransport erro.String = "invalid %s transport for socket"
-	ErrNilTransporter         erro.String = "cannot add a nil transporter"
+	ErrSocketIDTransportNotFound erro.StringF = "socket id %q not found in the in-memory map"
+	ErrNilTransporter            erro.String  = "expected a type of Transporter, found <nil>"
 )

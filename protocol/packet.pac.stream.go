@@ -30,7 +30,7 @@ func (x binaryStreamIn) Read(p []byte) (n int, err error) {
 	n = copy(p, numStr)
 
 	if n < len(numStr) {
-		return n, ErrOnReadSoBuffer.BufferF("binary stream", []byte(numStr)[n:], ErrShortRead)
+		return n, ErrReadUseBuffer.BufferF("binary stream", []byte(numStr)[n:], ErrShortRead)
 	}
 
 	return n, nil
@@ -55,7 +55,7 @@ func (x *binaryStreamIn) Write(p []byte) (n int, err error) {
 		case '-':
 			k, err := strconv.ParseInt(string(data), 10, 64)
 			if err != nil {
-				err = ErrBadParse.F("incoming binary stream", err)
+				err = ErrParseIntFailed.F("incoming binary stream", err)
 			}
 			*x = make([]func(io.Reader) error, k)
 			return n, err
@@ -70,7 +70,7 @@ func (x *binaryStreamIn) Write(p []byte) (n int, err error) {
 
 	num, err := strconv.ParseInt(string(data), 10, 64)
 	if err != nil {
-		err = ErrBadParse.F("incoming binary stream", err)
+		err = ErrParseIntFailed.F("incoming binary stream", err)
 		return n, err
 	}
 

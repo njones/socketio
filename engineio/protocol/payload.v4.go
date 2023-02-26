@@ -51,10 +51,10 @@ var NewPayloadEncoderV4 _payloadEncoderV4 = func(w io.Writer) *PayloadEncoderV4 
 func (enc *PayloadEncoderV4) Encode(payload PayloadV4) error {
 	for i, packet := range payload {
 		if i > 0 {
-			enc.write.Byte(RecordSeparator).OnErr(ErrPayloadEncode)
+			enc.write.Byte(RecordSeparator).OnErrF(ErrEncodePayloadFailed)
 		}
 		if err := enc.encode(packet); err != nil {
-			return ErrPayloadEncode.F("v4", err)
+			return ErrEncodePayloadFailed.F(err).KV(ver, "v4")
 		}
 	}
 	return enc.write.Err()
@@ -62,7 +62,7 @@ func (enc *PayloadEncoderV4) Encode(payload PayloadV4) error {
 
 func (enc *PayloadEncoderV4) encode(packet PacketV4) error {
 	if err := NewPacketEncoderV4(enc.write).Encode(packet); err != nil {
-		return ErrPayloadEncode.F("v4", err)
+		return ErrEncodePayloadFailed.F(err).KV(ver, "v4")
 	}
 	return nil
 }

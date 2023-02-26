@@ -60,7 +60,7 @@ func doV1(v1 *ServerV1, socketID SocketID, socket siot.Socket, req *Request) err
 		}
 	case siop.DisconnectPacket.Byte():
 		if err := v1.doDisconnectPacket(socketID, socket, req); err != nil {
-			if errors.Is(err, ErrBadOnDisconnectSocket) {
+			if errors.Is(err, ErrOnDisconnectSocket) {
 				return nil
 			}
 			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
@@ -78,7 +78,7 @@ func doV1(v1 *ServerV1, socketID SocketID, socket siot.Socket, req *Request) err
 			return e
 		}
 	default:
-		err := ErrInvalidPacketType.F("v1", socket)
+		err := ErrUnexpectedPacketType.F(socket).KV(ver, "v1")
 		v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
 	}
 	return nil
@@ -96,7 +96,7 @@ func doConnectPacket(v1 *ServerV1) func(SocketID, siot.Socket, *Request) error {
 		if fn, ok := v1.onConnect[socket.Namespace]; ok {
 			return fn(&SocketV1{inSocketV1: v1.inSocketV1.clone(), req: req, Connected: true})
 		}
-		return ErrBadOnConnectSocket
+		return ErrOnConnectSocket
 	}
 }
 
@@ -111,7 +111,7 @@ func doDisconnectPacket(v1 *ServerV1) func(SocketID, siot.Socket, *Request) erro
 			v1.tr().Leave(socket.Namespace, socketID, socketIDPrefix+socketID.String())
 			return fn.Callback("client namespace disconnect")
 		}
-		return ErrBadOnDisconnectSocket
+		return ErrOnDisconnectSocket
 	}
 }
 
@@ -125,7 +125,7 @@ func doEventPacket(v1 *ServerV1) func(SocketID, siot.Socket) error {
 		case []interface{}:
 			event, ok := data[0].(string)
 			if !ok {
-				return ErrBadEventName
+				return ErrUnknownEventName
 			}
 			if socket.Type != siop.DisconnectPacket.Byte() {
 				data = data[1:]
@@ -162,7 +162,7 @@ func doEventPacket(v1 *ServerV1) func(SocketID, siot.Socket) error {
 				return fn.Callback(stoi(data)...)
 			}
 		}
-		return ErrInvalidData.F(fmt.Sprintf("type %s", socket.Data)).KV("do", "eventPacket")
+		return ErrUnexpectedData.F(socket.Data).KV("do", "eventPacket")
 	}
 }
 
@@ -180,7 +180,7 @@ func doAckPacket(v1 *ServerV1) func(SocketID, siot.Socket) error {
 				err = fn.Callback(stoi(data)...)
 			}
 		default:
-			return ErrInvalidData.F(fmt.Sprintf("type %s", data)).KV("do", "ackPacket")
+			return ErrUnexpectedData.F(data).KV("do", "ackPacket")
 		}
 		return err
 	}

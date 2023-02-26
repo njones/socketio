@@ -66,12 +66,12 @@ func (wtr *Writer) Multi(ww ...io.Writer) *Writer {
 
 type onWtrErr struct{ *Writer }
 
-func (e onWtrErr) OnErr(err errs.String) {
+func (e onWtrErr) OnErr(err error) {
 	if e.err != nil {
 		e.err = err
 	}
 }
-func (e onWtrErr) OnErrF(err errs.String, v ...interface{}) {
+func (e onWtrErr) OnErrF(err errs.StringF, v ...interface{}) {
 	if e.err != nil {
 		e.err = err.F(v...)
 	}

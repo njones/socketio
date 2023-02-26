@@ -24,7 +24,7 @@ func (x packetAckID) Read(p []byte) (n int, err error) {
 	n = copy(p, []byte(numStr))
 
 	if n < len(numStr) {
-		return n, ErrOnReadSoBuffer.BufferF("AckID", []byte(numStr)[n:], ErrShortRead)
+		return n, ErrReadUseBuffer.BufferF("AckID", []byte(numStr)[n:], ErrShortRead)
 	}
 
 	return n, nil

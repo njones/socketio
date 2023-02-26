@@ -1,5 +1,24 @@
 package errors
 
+/*
+Common wordings for Errors
+
+State - error as a state
+  - "<type>: <state>"
+
+Noun - A single thing (use present tense)
+  - "unimplemented <type>"
+  - "invalid <type>, the <reason>"
+
+Verb - An action (use past tense)
+  - "unexpected <issue>"               [equality]
+  - "expected <state>, found <issue>"  [equality]
+  - "failed to <action>:: <error>"
+  - "unknown <reason>"
+  - "<type> unsupported, <reason>"
+  - "<type> not found (for <reason> | in <type>)"
+*/
+
 import (
 	"context"
 	"errors"
@@ -7,7 +26,12 @@ import (
 	"strings"
 )
 
+func KV(kv ...interface{}) Struct { return Struct{kv: kv} }
+
 type (
+	HTTPErrorStringF string
+	StringF          string
+
 	HTTPErrorString string
 
 	String string
@@ -19,19 +43,18 @@ type (
 	}
 )
 
-func (e HTTPErrorString) As(v interface{}) bool {
+func (e HTTPErrorStringF) As(v interface{}) bool {
 	if str, ok := v.(string); ok {
 		return strings.HasPrefix(string(e), str)
 	}
 	return false
 }
-func (e HTTPErrorString) Error() string               { return string(e) }
-func (e HTTPErrorString) F(v ...interface{}) Struct   { return String(e).F(v...) }
-func (e HTTPErrorString) KV(kv ...interface{}) Struct { return String(e).KV(kv...) }
+func (e HTTPErrorStringF) Error() string               { return string(e) }
+func (e HTTPErrorStringF) F(v ...interface{}) Struct   { return StringF(e).F(v...) }
+func (e HTTPErrorStringF) KV(kv ...interface{}) Struct { return String(e).KV(kv...) }
 
-func (e String) Error() string { return string(e) }
-
-func (e String) F(v ...interface{}) Struct {
+func (e StringF) Error() string { return string(e) }
+func (e StringF) F(v ...interface{}) Struct {
 	var (
 		f  [][]interface{}
 		kv []interface{}
@@ -58,7 +81,20 @@ func (e String) F(v ...interface{}) Struct {
 
 	return Struct{e: e, rr: err, f: f, kv: kv, wrap: errs}
 }
+func (e StringF) KV(kv ...interface{}) Struct {
+	return Struct{e: e, rr: e, kv: kv}
+}
 
+func (e HTTPErrorString) As(v interface{}) bool {
+	if str, ok := v.(string); ok {
+		return strings.HasPrefix(string(e), str)
+	}
+	return false
+}
+func (e HTTPErrorString) Error() string               { return string(e) }
+func (e HTTPErrorString) KV(kv ...interface{}) Struct { return String(e).KV(kv...) }
+
+func (e String) Error() string { return string(e) }
 func (e String) KV(kv ...interface{}) Struct {
 	return Struct{e: e, rr: e, kv: kv}
 }
