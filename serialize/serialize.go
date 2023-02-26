@@ -68,8 +68,8 @@ type (
 
 func Any(v interface{}) *_any                      { return &_any{v} }
 func (x *_any) String() (str string)               { str, _ = x.Serialize(); return }
-func (x *_any) Serialize() (str string, err error) { return "", ErrSerializableBinary }
-func (x *_any) Unserialize(str string) (err error) { return ErrSerializableBinary }
+func (x *_any) Serialize() (str string, err error) { return "", ErrUnsupported }
+func (x *_any) Unserialize(str string) (err error) { return ErrUnsupported }
 func (x *_any) Interface() (v interface{})         { return x.a }
 func (x _anyWrap) Unserialize(string) error        { return nil }
 func (x _anyWrap) String() string                  { return "" }
@@ -82,8 +82,8 @@ type (
 func Binary(v io.Reader) *_binary                     { return &_binary{v} }
 func (x *_binary) Read(p []byte) (n int, err error)   { return x.r.Read(p) }
 func (x *_binary) String() (str string)               { str, _ = x.Serialize(); return }
-func (x *_binary) Serialize() (str string, err error) { return "", ErrSerializableBinary }
-func (x *_binary) Unserialize(str string) (err error) { return ErrSerializableBinary }
+func (x *_binary) Serialize() (str string, err error) { return "", ErrUnsupportedUseRead }
+func (x *_binary) Unserialize(str string) (err error) { return ErrUnsupported }
 func (x *_binary) Interface() (v interface{})         { return x.r }
 func (x _binaryWrap) Unserialize(string) error        { return nil }
 func (x _binaryWrap) String() string                  { return "" }

@@ -5,5 +5,6 @@ import (
 )
 
 const (
-	ErrSerializableBinary erro.String = "can not serialize the object, use Read instead"
+	ErrUnsupportedUseRead erro.String = "Serialize() method unsupported, use the Read() method instead"
+	ErrUnsupported        erro.String = "method: unsupported"
 )

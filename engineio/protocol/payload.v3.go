@@ -75,7 +75,7 @@ var NewPayloadEncoderV3 _payloadEncoderV3 = func(w io.Writer) *PayloadEncoderV3 
 func (enc *PayloadEncoderV3) Encode(payload PayloadV3) error {
 	for _, packet := range payload {
 		if err := enc.encode(packet); err != nil {
-			return ErrPayloadEncode.F("v3", err)
+			return ErrEncodePayloadFailed.F(err).KV(ver, "v3")
 		}
 	}
 	return enc.write.Err()
@@ -98,7 +98,7 @@ func (enc *PayloadEncoderV3) encode(packet PacketV3) error {
 
 	enc.write.String(fmt.Sprintf("%d:%s", packet.Len()+lenBuf, binaryB))
 	if err := NewPacketEncoderV3(enc.write).Encode(packet); err != nil {
-		return ErrPayloadEncode.F("v3", err)
+		return ErrEncodePayloadFailed.F(err).KV(ver, "v3")
 	}
 	return nil
 }

@@ -35,7 +35,7 @@ func scrub(useBinary bool, event Event, data []seri.Serializable) (hasBinary boo
 			}
 			rtn[i+1], err = v.Serialize()
 			if err != nil {
-				return hasBinary, nil, cb, ErrBadScrub.F(err)
+				return hasBinary, nil, cb, ErrScrubFailed.F(err)
 			}
 		}
 		return hasBinary, rtn, nil, nil

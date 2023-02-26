@@ -304,7 +304,7 @@ func withPacketData(v interface{}) packetData {
 	case error:
 		return readWriteErr{val}
 	default:
-		return readWriteErr{ErrInvalidPacketType.F(val)}
+		return readWriteErr{ErrUnexpectedPacketType.F(val)}
 	}
 }
 

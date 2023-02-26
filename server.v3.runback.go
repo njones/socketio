@@ -45,7 +45,7 @@ func doBinaryAckPacket(v1 *ServerV1) func(SocketID, siot.Socket) error {
 				err = fn.Callback(stoi(data[1:])...)
 			}
 		default:
-			return ErrInvalidPacketTypeExpected.F(socket.Data)
+			return ErrUnexpectedBinaryData.F(socket.Data)
 		}
 		return err
 	}

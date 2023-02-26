@@ -170,7 +170,7 @@ Write:
 		if len(packets) > 0 {
 			if err := t.codec.PayloadEncoder.To(w).WritePayload(packets); err != nil {
 				t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{err}}
-				return ErrTransportEncode.F("polling", err)
+				return ErrEncodeFailed.F("polling", err)
 			}
 		}
 	}
@@ -185,7 +185,7 @@ func (t *PollingTransport) emit(w http.ResponseWriter, r *http.Request) error {
 	var payload eiop.Payload
 	if err := t.codec.PayloadDecoder.From(r.Body).ReadPayload(&payload); err != nil {
 		t.send <- eiop.Packet{T: eiop.NoopPacket, D: socketClose{err}}
-		return ErrTransportDecode.F("polling", err)
+		return ErrDecodeFailed.F("polling", err)
 	}
 
 Read:

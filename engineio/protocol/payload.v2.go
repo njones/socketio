@@ -64,22 +64,22 @@ func (enc *PayloadEncoderV2) writePacketLen(packet Packet) (err error) {
 	messageTypeLen := len(packet.T.Bytes())
 	switch data := packet.D.(type) {
 	case string:
-		enc.write.Bytes([]byte(strconv.Itoa(len([]rune(data))+messageTypeLen))).OnErrF(ErrPayloadEncode, "v2", enc.write.Err())
+		enc.write.Bytes([]byte(strconv.Itoa(len([]rune(data))+messageTypeLen))).OnErrF(ErrEncodePayloadFailed, enc.write.Err(), kv(ver, "v2"))
 	case []byte:
-		enc.write.Bytes([]byte(strconv.Itoa(len(data)+messageTypeLen))).OnErrF(ErrPayloadEncode, "v2", enc.write.Err())
+		enc.write.Bytes([]byte(strconv.Itoa(len(data)+messageTypeLen))).OnErrF(ErrEncodePayloadFailed, enc.write.Err(), kv(ver, "v2"))
 	case useLen:
-		enc.write.Bytes([]byte(strconv.Itoa(data.Len()+messageTypeLen))).OnErrF(ErrPayloadEncode, "v2", enc.write.Err())
+		enc.write.Bytes([]byte(strconv.Itoa(data.Len()+messageTypeLen))).OnErrF(ErrEncodePayloadFailed, enc.write.Err(), kv(ver, "v2"))
 	default:
-		enc.write.Bytes([]byte(strconv.Itoa(messageTypeLen))).OnErrF(ErrPayloadEncode, "v2", enc.write.Err())
+		enc.write.Bytes([]byte(strconv.Itoa(messageTypeLen))).OnErrF(ErrEncodePayloadFailed, enc.write.Err(), kv(ver, "v2"))
 	}
-	enc.write.Byte(':').OnErr(ErrPayloadEncode)
+	enc.write.Byte(':').OnErrF(ErrEncodePayloadFailed, kv(ver, "v2"))
 
 	return enc.write.Err()
 }
 
 func (enc *PayloadEncoderV2) writePacket(packet PacketV2) (err error) {
 	if err := NewPacketEncoderV2(enc.write).Encode(packet); err != nil {
-		return ErrPayloadEncode.F("v2", err)
+		return ErrEncodePayloadFailed.F(err).KV(ver, "v2")
 	}
 	return enc.write.Err()
 }

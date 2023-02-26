@@ -24,7 +24,7 @@ func (wr *writer) WriteHeader(s int) {
 func (w *writer) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	h, ok := w.ResponseWriter.(http.Hijacker)
 	if !ok {
-		return nil, nil, ErrUnsupportedMethod.F("hijack")
+		return nil, nil, ErrUnimplementedMethod.F("http.Hijacker()")
 	}
 	return h.Hijack()
 }

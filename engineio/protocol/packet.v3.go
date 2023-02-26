@@ -29,7 +29,7 @@ func (dec *PacketDecoderV3) Decode(packet *PacketV3) error {
 	}
 
 	if packet.T == 0 && !packet.isOpenPacket {
-		if dec.read.IsNotErr() && dec.read.ConditionalErr(dec.readPacketType(&packet.T, dec.read)).OnErrF(ErrPacketDecode, "v3", dec.read.Err()).IsNotErr() {
+		if dec.read.IsNotErr() && dec.read.ConditionalErr(dec.readPacketType(&packet.T, dec.read)).OnErrF(ErrDecodePacketFailed, dec.read.Err(), kv(ver, "v3")).IsNotErr() {
 			packet.isOpenPacket = (packet.T == 0)
 			defer func() { packet.isOpenPacket = false }() // always clear at the end...
 		}
@@ -38,7 +38,7 @@ func (dec *PacketDecoderV3) Decode(packet *PacketV3) error {
 	switch packet.T {
 	case OpenPacket:
 		var data HandshakeV3
-		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data).OnErrF(ErrHandshakeDecode, "v3", dec.read.Err())
+		dec.read.SetDecoder(_packetJSONDecoder(json.NewDecoder)).Decode(&data).OnErrF(ErrDecodeHandshakeFailed, dec.read.Err(), kv(ver, "v3"))
 		if dec.read.IsNotErr() {
 			packet.D = &data
 		}
@@ -47,7 +47,7 @@ func (dec *PacketDecoderV3) Decode(packet *PacketV3) error {
 
 	var v2 = packet.PacketV2
 	if dec.read.IsNotErr() {
-		dec.read.ConditionalErr(dec.PacketDecoderV2.Decode(&v2)).OnErrF(ErrPacketDecode, "v3", dec.read.Err())
+		dec.read.ConditionalErr(dec.PacketDecoderV2.Decode(&v2)).OnErrF(ErrDecodePacketFailed, dec.read.Err(), kv(ver, "v3"))
 		packet.D = v2.D
 		if packet.T == MessagePacket && packet.IsBinary {
 			switch data := packet.D.(type) {
@@ -74,10 +74,10 @@ func (enc *PacketEncoderV3) Encode(packet PacketV3) (err error) {
 			if data.Upgrades == nil {
 				data.Upgrades = []string{}
 			}
-			enc.write.Bytes(packet.T.Bytes()).OnErr(ErrPacketEncode)
-			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrHandshakeEncode, "v3", enc.write)
+			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrEncodePacketFailed)
+			enc.write.UseEncoder(_packetJSONEncoder(json.NewEncoder)).Encode(data).OnErrF(ErrEncodeHandshakeFailed, enc.write, kv(ver, "v3"))
 		default:
-			return ErrInvalidHandshake.F("v3")
+			return ErrUnexpectedHandshake.F("*HandshakeV3", data)
 		}
 		return enc.write.Err()
 	}

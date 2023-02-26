@@ -23,7 +23,7 @@ func (x packetNS) Read(p []byte) (n int, err error) {
 	}
 
 	if n = copy(p, x); n < len(x) {
-		return n, ErrOnReadSoBuffer.BufferF("namespace", []byte(x)[n:], ErrShortRead)
+		return n, ErrReadUseBuffer.BufferF("namespace", []byte(x)[n:], ErrShortRead)
 	}
 
 	return n, nil

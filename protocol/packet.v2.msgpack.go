@@ -12,7 +12,7 @@ import (
 func packetDataMarshalV2(idx int, r io.Reader) (out []byte, err error) {
 	var raw, buf []byte
 	if raw, err = io.ReadAll(r); err != nil {
-		return nil, ErrBadRead.F(err)
+		return nil, ErrReadFailed.F(err)
 	}
 
 	if len(raw) == 0 {
@@ -20,7 +20,7 @@ func packetDataMarshalV2(idx int, r io.Reader) (out []byte, err error) {
 	}
 
 	if buf, err = msgpack.Marshal(raw); err != nil {
-		return nil, ErrBadFieldMsgPackEncode.F(err)
+		return nil, ErrEncodeFieldFailed.F(err)
 	}
 
 	return json.Marshal(struct {
@@ -36,7 +36,7 @@ func packetDataMarshalV2(idx int, r io.Reader) (out []byte, err error) {
 func packetDataArrayUnmarshalV2(data []byte, v interface{}) error {
 	err := json.Unmarshal(data, &v)
 	if err != nil {
-		return ErrBadInitialFieldUnmarshal.F(err)
+		return ErrUnmarshalInitialFieldFailed.F(err)
 	}
 
 	switch fields := v.(type) {
@@ -57,14 +57,14 @@ func packetDataArrayUnmarshalV2(data []byte, v interface{}) error {
 				var raw, buf []byte
 				if isBase64 {
 					if raw, err = base64.StdEncoding.DecodeString(datum["data"].(string)); err != nil {
-						return ErrBadFieldBase64Decode.F(err)
+						return ErrDecodeBase64Failed.F(err)
 					}
 				} else {
 					rawStr, _ := datum["data"].(string)
 					raw = []byte(rawStr)
 				}
 				if err = msgpack.Unmarshal(raw, &buf); err != nil {
-					return ErrBadFieldMsgPackDecode.F(err)
+					return ErrDecodeFieldFailed.F(err)
 				}
 
 				(*fields)[i+1] = bytes.NewReader(buf) // +1 because we started 1 ahead...
@@ -77,7 +77,7 @@ func packetDataArrayUnmarshalV2(data []byte, v interface{}) error {
 func packetDataObjectUnmarshalV2(data []byte, v interface{}) error {
 	err := json.Unmarshal(data, &v)
 	if err != nil {
-		return ErrBadInitialFieldUnmarshal.F(err)
+		return ErrUnmarshalInitialFieldFailed.F(err)
 	}
 
 	switch fields := v.(type) {
@@ -94,10 +94,10 @@ func packetDataObjectUnmarshalV2(data []byte, v interface{}) error {
 
 				var raw, buf []byte
 				if raw, err = base64.StdEncoding.DecodeString(datum["data"].(string)); err != nil {
-					return ErrBadFieldBase64Decode.F(err)
+					return ErrDecodeBase64Failed.F(err)
 				}
 				if err = msgpack.Unmarshal(raw, &buf); err != nil {
-					return ErrBadFieldMsgPackDecode.F(err)
+					return ErrDecodeFieldFailed.F(err)
 				}
 
 				(*fields)[i] = bytes.NewReader(buf)

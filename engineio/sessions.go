@@ -72,7 +72,7 @@ func (t *transport) Get(sessionID SessionID) (eiot.Transporter, error) {
 		return tr, nil
 	}
 
-	return nil, ErrNoSessionID
+	return nil, ErrUnknownSessionID
 }
 
 type lifecycle struct {

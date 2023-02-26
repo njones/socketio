@@ -121,11 +121,12 @@ func (tr *inMemoryTransport) Send(socketID SocketID, data Data, opts ...Option) 
 	tr.ṡ.Lock()
 	defer tr.ṡ.Unlock()
 
-	if _, ok := tr.s[socketID]; ok {
-		tr.s[socketID].Send(data, opts...)
-		return nil
+	if _, ok := tr.s[socketID]; !ok {
+		return ErrSocketIDTransportNotFound.F(socketID.String())
 	}
-	return ErrInvalidSocketTransport.F("map")
+
+	tr.s[socketID].Send(data, opts...)
+	return nil
 }
 
 // namespace/socketID to room relationship

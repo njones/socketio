@@ -9,32 +9,21 @@ import (
 
 // All of the errors that can happen while reading or writing socket.io packets
 const (
-	ErrOnReadSoBuffer errsPacket = "error reading packet type %s, save for buffer"
-
-	ErrBadRead    erro.String = "bad read of bytes: %w"
-	ErrShortRead  erro.String = "short read"
-	ErrShortWrite erro.String = "short write"
-
-	ErrEmptyDataArray          erro.String = "empty data array"
-	ErrEmptyDataObject         erro.String = "empty data object"
-	ErrNoAckID                 erro.String = "no ackID found"
-	ErrPacketDataNotWritable   erro.String = "no data io.writer found"
-	ErrUnexpectedAttachmentEnd erro.String = "unexpected attachment end"
-
-	ErrUnexpectedJSONEnd  erro.String = "unexpected end of JSON input"
-	ErrBadMarshal         erro.String = "data marshal: %w"
-	ErrBadUnmarshal       erro.String = "data unmarshal: %w"
-	ErrBadBinaryMarshal   erro.String = "binary data marshal: %w"
-	ErrBadBinaryUnmarshal erro.String = "binary data unmarshal: %w"
-	ErrBadParse           erro.String = "%s int parse: %w"
-
-	ErrBinaryDataUnsupported erro.String = "binary data for this version is unsupported"
-	ErrInvalidPacketType     erro.String = "the data packet type %T does not exist"
-
-	ErrBadInitialFieldUnmarshal erro.String = "bad initial unmarshal of packet field data: %w"
-	ErrBadFieldBase64Decode     erro.String = "bad base64 decode of field string for msgpack: %w"
-	ErrBadFieldMsgPackDecode    erro.String = "bad msgpack decode of field string for msgpack: %w"
-	ErrBadFieldMsgPackEncode    erro.String = "bad msgpack encode of field string for msgpack: %w"
+	ErrReadFailed                  erro.StringF = "failed to read bytes:: %w"
+	ErrUnmarshalInitialFieldFailed erro.StringF = "failed to unmarshal initial fields:: %w"
+	ErrMarshalDataFailed           erro.StringF = "failed to marshal data:: %w"
+	ErrUnmarshalDataFailed         erro.StringF = "failed to unmarshal data:: %w"
+	ErrMarshalBinaryDataFailed     erro.StringF = "failed to marshal binary data:: %w"
+	ErrUnmarshalBinaryDataFailed   erro.StringF = "failed to unmarshal binary data:: %w"
+	ErrParseIntFailed              erro.StringF = "failed to parse int (%s):: %w"
+	ErrUnexpectedPacketType        erro.StringF = "unexpected data type %T"
+	ErrUnexpectedAttachmentEnd     erro.String  = "unexpected attachment end"
+	ErrUnexpectedJSONEnd           erro.String  = "unexpected JSON end"
+	ErrBinaryDataUnsupported       erro.String  = "binary data unsupported in this version"
+	ErrReadUseBuffer               errsPacket   = "%s: read buffer"
+	ErrShortRead                   erro.String  = "read: short"
+	ErrShortWrite                  erro.String  = "write: short"
+	ErrEmptyDataArray              erro.String  = "data array: empty"
 )
 
 // errsPacket is an error type that can send back PacketError errors.

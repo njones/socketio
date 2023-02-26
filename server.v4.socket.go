@@ -123,7 +123,7 @@ func (v4 inSocketV4) Emit(event Event, data ...Data) error {
 	for _, exceptRoom := range v4.except {
 		rooms, err := transport.Sockets(v1.nsp()).FromRoom(exceptRoom)
 		if err != nil {
-			ErrFromRoom.F(err)
+			ErrFromRoomFailed.F(err)
 		}
 		for _, id := range rooms {
 			uniqueID[id] = struct{}{}
@@ -132,7 +132,7 @@ func (v4 inSocketV4) Emit(event Event, data ...Data) error {
 	for _, toRoom := range v1.to {
 		ids, err := transport.Sockets(v1.nsp()).FromRoom(toRoom)
 		if err != nil {
-			ErrFromRoom.F(err)
+			ErrFromRoomFailed.F(err)
 		}
 
 		for _, id := range ids {

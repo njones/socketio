@@ -20,7 +20,7 @@ func doConnectPacketV2(v2 *ServerV2) func(SocketID, siot.Socket, *Request) error
 		if fn, ok := v2.onConnect[socket.Namespace]; ok {
 			return fn(&SocketV2{inSocketV2: v2.inSocketV2.clone(), req: req})
 		}
-		return ErrBadOnConnectSocket
+		return ErrOnConnectSocket
 	}
 }
 
@@ -35,7 +35,7 @@ func doBinaryEventPacket(v2 *ServerV2) func(SocketID, siot.Socket) error {
 		case []interface{}:
 			event, ok := data[0].(string)
 			if !ok {
-				return ErrOnBinaryEvent.F(data)
+				return ErrUnknownBinaryEventName.F(data)
 			}
 			if fn, ok := v1.events[socket.Namespace][event][socketID]; ok {
 				if socket.AckID > 0 {
@@ -61,7 +61,7 @@ func doBinaryEventPacket(v2 *ServerV2) func(SocketID, siot.Socket) error {
 				err = fn.Callback(stoi(data[1:])...)
 			}
 		default:
-			return ErrInvalidPacketTypeExpected.F(socket.Data)
+			return ErrUnexpectedBinaryData.F(socket.Data)
 		}
 		return err
 	}
