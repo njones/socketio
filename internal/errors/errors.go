@@ -25,18 +25,32 @@ import (
 	"strings"
 )
 
+type StatusError string
+
+func (e StatusError) Error() string { return string(e) }
+
+const HTTPStatusErrorLen = len(HTTPStatusError400)
+const HTTPStatusError400 StatusError = "|400| "
+
 func KV(kv ...interface{}) Struct { return Struct{kv: kv} }
 
 type (
+	State   string
 	StringF string
-	String  string
-	Struct  struct {
+
+	String string
+	Struct struct {
 		e, rr error
 		wrap  []error
 		f     [][]interface{}
 		kv    []interface{}
 	}
 )
+
+func (e State) Error() string { return string(e) }
+func (e State) KV(kv ...interface{}) Struct {
+	return Struct{e: e, rr: e, kv: kv}
+}
 
 func (e StringF) Error() string { return string(e) }
 func (e StringF) F(v ...interface{}) Struct {

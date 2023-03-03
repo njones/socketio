@@ -6,5 +6,5 @@ import (
 
 const (
 	ErrUnsupportedUseRead erro.String = "Serialize() method unsupported, use the Read() method instead"
-	ErrUnsupported        erro.String = "method: unsupported"
+	ErrUnsupported        erro.State  = "method: unsupported"
 )

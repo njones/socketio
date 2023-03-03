@@ -113,7 +113,7 @@ func (v2 *serverV2) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 HandleError:
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrRequestHTTPMethod):
+		case errors.Is(err, ErrInvalidRequestHTTPMethod):
 			return
 		}
 		return
@@ -122,7 +122,7 @@ HandleError:
 
 func (v2 *serverV2) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot.Transporter, error) {
 	if v2.path == nil || !strings.HasPrefix(r.URL.Path, *v2.path) {
-		return nil, ErrURIPath
+		return nil, ErrInvalidURIPath
 	}
 
 	sessionID := sessionIDFrom(r)
@@ -136,7 +136,7 @@ func (v2 *serverV2) ServeTransport(w http.ResponseWriter, r *http.Request) (eiot
 		}
 		fallthrough
 	default:
-		return nil, ErrRequestHTTPMethod
+		return nil, ErrInvalidRequestHTTPMethod
 	}
 
 	eioVersion := eioVersionFrom(r)
@@ -258,7 +258,7 @@ func (v2 *serverV2) doUpgrade(transport eiot.Transporter, err error) func(http.R
 					return transport, isUpgrade, func() error { return v2.sessions.Set(transport) }, nil
 				}
 			}
-			return nil, false, nil, ErrBadUpgrade
+			return nil, false, nil, ErrTransportUpgradeFailed
 		}
 		return transport, isUpgrade, nil, err
 	}

@@ -16,6 +16,6 @@ const (
 	ErrUnexpectedBinaryData   erro.StringF = "expected an []interface{} (binary array) or []string, found %T"
 	ErrUnexpectedPacketType   erro.StringF = "unexpected %T"
 	ErrNamespaceNotFound      erro.StringF = "namespace %q not found"
-	ErrOnConnectSocket        erro.String  = "socket: invalid onconnect"
-	ErrOnDisconnectSocket     erro.String  = "socket: invalid ondisconnect"
+	ErrOnConnectSocket        erro.State   = "socket: invalid onconnect"
+	ErrOnDisconnectSocket     erro.State   = "socket: invalid ondisconnect"
 )

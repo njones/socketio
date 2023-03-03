@@ -1,40 +1,30 @@
 package engineio
 
 import (
-	"fmt"
+	"strings"
 
 	erro "github.com/njones/socketio/internal/errors"
 )
 
 const (
-	ErrUnknownTransport  erro.String = "unknown transport"
-	ErrUnknownSessionID  erro.String = "unknown session id"
-	ErrUnknownEIOVersion erro.String = "unknown engineio version"
-	ErrRequestHTTPMethod erro.String = "invalid request, an unimplemented HTTP method"
-	ErrURIPath           erro.String = "invalid URI path, the prefix is not found"
+	ErrUnknownTransport         = httpErrStr(erro.HTTPStatusError400 + "unknown transport")
+	ErrUnknownSessionID         = httpErrStr(erro.HTTPStatusError400 + "unknown session id")
+	ErrUnknownEIOVersion        = httpErrStr(erro.HTTPStatusError400 + "unknown engineio version")
+	ErrInvalidRequestHTTPMethod = httpErrStr(erro.HTTPStatusError400 + "invalid request, an unimplemented HTTP method")
+	ErrInvalidURIPath           = httpErrStr(erro.HTTPStatusError400 + "invalid URI path, the prefix is not found")
+	ErrTransportUpgradeFailed   = httpErrStr(erro.HTTPStatusError400 + "failed to upgrade transport")
 
-	EOH erro.String = "End Of Handshake"
-	IOR erro.String = "Is OPTION Request"
+	EOH erro.State = "End Of Handshake"
+	IOR erro.State = "Is OPTION Request"
 )
 
-const HTTPStatusError400 httpErrorStatus = 400
+type httpErrStr string
 
-var ErrBadUpgrade = httpError{400, "failed to upgrade transport"}
+func (e httpErrStr) Error() string { return string(e[erro.HTTPStatusErrorLen:]) }
 
-type httpErrorStatus int
-
-func (e httpErrorStatus) Error() string { return fmt.Sprintf("HTTP status: %d", e) }
-
-type httpError struct {
-	status int
-	erro.String
-}
-
-func (e httpError) Error() string { return string(e.String) }
-
-func (e httpError) Is(target error) bool {
-	if te, ok := target.(httpErrorStatus); ok {
-		return int(te) == e.status
+func (e httpErrStr) Is(target error) bool {
+	if prefix, ok := target.(erro.StatusError); ok {
+		return strings.HasPrefix(string(e), string(prefix))
 	}
 	return false
 }
