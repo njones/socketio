@@ -21,9 +21,9 @@ const (
 	ErrUnexpectedJSONEnd           erro.String  = "unexpected JSON end"
 	ErrBinaryDataUnsupported       erro.String  = "binary data unsupported in this version"
 	ErrReadUseBuffer               errsPacket   = "%s: read buffer"
-	ErrShortRead                   erro.String  = "read: short"
-	ErrShortWrite                  erro.String  = "write: short"
-	ErrEmptyDataArray              erro.String  = "data array: empty"
+	ErrShortRead                   erro.State   = "read: short"
+	ErrShortWrite                  erro.State   = "write: short"
+	ErrEmptyDataArray              erro.State   = "data array: empty"
 )
 
 // errsPacket is an error type that can send back PacketError errors.

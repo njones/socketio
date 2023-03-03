@@ -99,12 +99,12 @@ func (enc *PacketEncoderV2) Encode(packet PacketV2) (err error) {
 			enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrEncodePacketFailed, enc.write, kv(ver, "v2"))
 			enc.write.Encode(data).OnErrF(ErrEncodePacketFailed, enc.write, kv(ver, "v2"))
 		default:
-			return ErrUnexpectedPacketData.F(fmt.Sprintf("unexpected data type of: %T", data))
+			return ErrUnexpectedPacketData.F(data)
 		}
 	case ClosePacket, UpgradePacket, NoopPacket:
 		enc.write.Bytes(packet.T.Bytes()).OnErrF(ErrEncodePacketFailed, enc.write, kv(ver, "v2"))
 	default:
-		return ErrUnexpectedPacketType.F(fmt.Sprintf("unexpected packet type of: %s", packet.T))
+		return ErrUnexpectedPacketType.F(packet.T)
 	}
 
 	return enc.write.Err()

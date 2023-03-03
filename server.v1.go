@@ -9,7 +9,7 @@ import (
 
 	nmem "github.com/njones/socketio/adaptor/transport/memory"
 	eio "github.com/njones/socketio/engineio"
-	eiot "github.com/njones/socketio/engineio/transport"
+	erro "github.com/njones/socketio/internal/errors"
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
 )
@@ -118,19 +118,12 @@ func (v1 *ServerV1) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx = v1.ctx
 	}
 
+	var eState erro.State
 	if err := v1.serveHTTP(w, r.WithContext(ctx)); err != nil {
 		switch {
-		case
-			errors.Is(err, eiot.ErrTimeoutSocket),
-			errors.Is(err, eiot.ErrCloseSocket),
-			errors.Is(err, eio.EOH):
+		case errors.As(err, &eState):
 			return
-		case
-			errors.Is(err, eio.HTTPStatusError400),
-			errors.Is(err, eio.ErrUnknownSessionID),
-			errors.Is(err, eio.ErrUnknownEIOVersion),
-			errors.Is(err, eio.ErrUnknownTransport),
-			errors.Is(err, eio.ErrRequestHTTPMethod):
+		case errors.Is(err, erro.HTTPStatusError400):
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
