@@ -20,7 +20,6 @@ Verb - An action (use past tense)
 */
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -29,29 +28,15 @@ import (
 func KV(kv ...interface{}) Struct { return Struct{kv: kv} }
 
 type (
-	HTTPErrorStringF string
-	StringF          string
-
-	HTTPErrorString string
-
-	String string
-	Struct struct {
+	StringF string
+	String  string
+	Struct  struct {
 		e, rr error
 		wrap  []error
 		f     [][]interface{}
 		kv    []interface{}
 	}
 )
-
-func (e HTTPErrorStringF) As(v interface{}) bool {
-	if str, ok := v.(string); ok {
-		return strings.HasPrefix(string(e), str)
-	}
-	return false
-}
-func (e HTTPErrorStringF) Error() string               { return string(e) }
-func (e HTTPErrorStringF) F(v ...interface{}) Struct   { return StringF(e).F(v...) }
-func (e HTTPErrorStringF) KV(kv ...interface{}) Struct { return String(e).KV(kv...) }
 
 func (e StringF) Error() string { return string(e) }
 func (e StringF) F(v ...interface{}) Struct {
@@ -84,15 +69,6 @@ func (e StringF) F(v ...interface{}) Struct {
 func (e StringF) KV(kv ...interface{}) Struct {
 	return Struct{e: e, rr: e, kv: kv}
 }
-
-func (e HTTPErrorString) As(v interface{}) bool {
-	if str, ok := v.(string); ok {
-		return strings.HasPrefix(string(e), str)
-	}
-	return false
-}
-func (e HTTPErrorString) Error() string               { return string(e) }
-func (e HTTPErrorString) KV(kv ...interface{}) Struct { return String(e).KV(kv...) }
 
 func (e String) Error() string { return string(e) }
 func (e String) KV(kv ...interface{}) Struct {
@@ -152,34 +128,4 @@ func fmtKV(kvPairs []interface{}) string {
 	}
 
 	return fmt.Sprintf("\t"+`{"%s"}`, strings.Join(pairs, `","`))
-}
-
-type Inf chan interface{}
-
-type Group struct {
-	inf Inf
-	ctx context.Context
-	fns []func(c Inf) error
-}
-
-func (g *Group) WithContext(ctx context.Context) { g.ctx = ctx }
-func (g *Group) Add(fn func(Inf) error)          { g.fns = append(g.fns, fn) }
-func (g *Group) Out() interface{}                { return <-g.inf }
-
-func (g *Group) Err() error {
-	for _, fn := range g.fns {
-		select {
-		case <-g.ctx.Done():
-			return context.Canceled
-		default:
-			if err := fn(g.inf); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func NewGroup() *Group {
-	return &Group{ctx: context.TODO(), inf: make(Inf, 1)}
 }
