@@ -16,17 +16,92 @@ import (
 	"testing"
 	"time"
 
-	sio "github.com/njones/socketio"
+	"github.com/njones/socketio"
 	eio "github.com/njones/socketio/engineio"
 	itst "github.com/njones/socketio/internal/test"
 	"github.com/stretchr/testify/assert"
 	sock "golang.org/x/net/websocket"
 )
 
+type testData struct {
+	want    map[string][][]string
+	count   int
+	server  socketio.Server
+	syncOn  *sync.WaitGroup
+	version int
+
+	transport struct {
+		value string
+		param string
+	}
+	sid struct {
+		value string
+		param struct {
+			grab, send func() string
+		}
+	}
+	skipVersion,
+	skipGrabSID, skipSendSID,
+	skipTransport, skipTimestamp bool
+}
+
+func (t testData) paramVersion() string {
+	if t.skipVersion {
+		return ""
+	}
+	return fmt.Sprintf("&EIO=%d", t.version)
+}
+func (t testData) paramTransport() string {
+	if t.skipTransport {
+		return ""
+	}
+
+	if len(t.transport.param) > 0 {
+		return "&transport=" + t.transport.param
+	}
+
+	return "&transport=" + t.transport.value
+}
+func (t testData) paramSID(id string) struct{ grab, send func() string } {
+	var out = "&sid=" + id
+	if t.sid.value != "" {
+		out = "&sid=" + t.sid.value
+	}
+
+	t.sid.param.grab = func() string {
+		if t.skipGrabSID {
+			return ""
+		}
+		return out
+	}
+	t.sid.param.send = func() string {
+		if t.skipSendSID {
+			return ""
+		}
+		return out
+	}
+	return t.sid.param
+}
+func (t testData) paramTimestamp() string {
+	if t.skipTimestamp {
+		return ""
+	}
+	return fmt.Sprintf("&t=%d", time.Now().UnixNano())
+}
+func (t testData) paramQuery(queryStr [][]string) string {
+	var query string
+	if len(queryStr[0]) > 0 {
+		query = "&" + strings.Join(queryStr[0], "&")
+	}
+	return query
+}
+
+type testDataOptFunc func(*testData)
+
 type (
 	testFn          func(*testing.T)
-	testParamsInFn  func(sio.Server, int, map[string][][]string, *sync.WaitGroup) testFn
-	testParamsOutFn func(*testing.T) (sio.Server, int, map[string][][]string, *sync.WaitGroup)
+	testParamsInFn  func(...testDataOptFunc) testFn
+	testParamsOutFn func(*testing.T) []testDataOptFunc
 )
 
 var runTest, skipTest = itst.RunTest, itst.SkipTest               //lint:ignore U1000 Ignore unused function when testing
@@ -64,6 +139,7 @@ type testClient struct {
 
 type v1WebsocketClient struct {
 	t *testing.T
+	d testData
 
 	eioVersion   int
 	eioSessionID string // filled in on connect
@@ -75,17 +151,12 @@ type v1WebsocketClient struct {
 	client *http.Client
 }
 
-func (c *v1WebsocketClient) ts() int64 { c.t.Helper(); return time.Now().UnixNano() }
 func (c *v1WebsocketClient) connect(queryStr ...[]string) {
 	c.t.Helper()
 
-	var query string
-	if len(queryStr[0]) > 0 {
-		query = "&" + strings.Join(queryStr[0], "&")
-	}
-
 	var err error
-	URL := strings.Replace(fmt.Sprintf("%s/socket.io/?EIO=%d&transport=websocket&t=%d%s", c.base, c.eioVersion, c.ts(), query), "http", "ws", 1)
+	URL := fmt.Sprintf("%s/socket.io/?", c.base) + c.d.paramVersion() + c.d.paramTransport() + c.d.paramTimestamp() + c.d.paramQuery(queryStr)
+	URL = strings.Replace(URL, "http", "ws", 1)
 
 	c.conn, err = sock.Dial(URL, "", c.base)
 	if err != nil {
@@ -125,7 +196,7 @@ func (c *v1WebsocketClient) grab() []string {
 		var b = make([]byte, 1000)
 
 		n, err = c.conn.Read(b)
-		if string(b[:n]) == "2" || n == 0 { // skip the ping becuase it's all about timing... sometimes they will be there sometimes not
+		if string(b[:n]) == "2" || n == 0 { // skip the ping because it's all about timing... sometimes they will be there sometimes not
 			break
 		}
 		rtn = append(rtn, string(b[:n]))
@@ -136,6 +207,7 @@ func (c *v1WebsocketClient) grab() []string {
 
 type v3WebsocketClient struct {
 	t *testing.T
+	d testData
 
 	keep40s bool
 
@@ -149,18 +221,12 @@ type v3WebsocketClient struct {
 	client *http.Client
 }
 
-func (c *v3WebsocketClient) ts() int64 { c.t.Helper(); return time.Now().UnixNano() }
 func (c *v3WebsocketClient) connect(extraStr ...[]string) {
 	c.t.Helper()
 
-	var query string
-	if len(extraStr[0]) > 0 {
-		query = "&" + strings.Join(extraStr[0], "&")
-	}
-
 	var err error
-	URL := strings.Replace(fmt.Sprintf("%s/socket.io/?EIO=%d&transport=websocket&t=%d%s", c.base, c.eioVersion, c.ts(), query), "http", "ws", 1)
-
+	URL := fmt.Sprintf("%s/socket.io/?", c.base) + c.d.paramVersion() + c.d.paramTransport() + c.d.paramTimestamp() + c.d.paramQuery(extraStr)
+	URL = strings.Replace(URL, "http", "ws", 1)
 	c.conn, err = sock.Dial(URL, "", c.base)
 	if err != nil {
 		panic(err)
@@ -234,6 +300,7 @@ func (c *v3WebsocketClient) grab() []string {
 
 type v1PollingClient struct {
 	t *testing.T
+	d testData
 
 	eioVersion   int
 	eioSessionID string // filled in on connect
@@ -243,7 +310,6 @@ type v1PollingClient struct {
 	client *http.Client
 }
 
-func (c *v1PollingClient) ts() int64 { c.t.Helper(); return time.Now().UnixNano() }
 func (c *v1PollingClient) parse(body []byte) (rtn [][]byte) {
 	c.t.Helper()
 
@@ -252,7 +318,7 @@ func (c *v1PollingClient) parse(body []byte) (rtn [][]byte) {
 		switch b := body[i]; b {
 		case ':':
 			i++
-			if string(body[i:i+x]) != "2" { // skip the ping becuase it's all about timing... sometimes they will be there sometimes not
+			if string(body[i:i+x]) != "2" { // skip the ping because it's all about timing... sometimes they will be there sometimes not
 				rtn = append(rtn, body[i:i+x])
 			}
 			i, x = i+x-1, 0 // -1 is because of the i++ loop
@@ -268,18 +334,12 @@ func (c *v1PollingClient) parse(body []byte) (rtn [][]byte) {
 
 	return rtn
 }
+
 func (c *v1PollingClient) connect(queryStr ...[]string) {
 	c.t.Helper()
 
-	var query string
-	if len(queryStr[0]) > 0 {
-		query = "&" + strings.Join(queryStr[0], "&")
-	}
-
-	URL := fmt.Sprintf("%s/socket.io/?EIO=%d&transport=polling&t=%d%s", c.base, c.eioVersion, c.ts(), query)
+	URL := fmt.Sprintf("%s/socket.io/?", c.base) + c.d.paramVersion() + c.d.paramTransport() + c.d.paramTimestamp() + c.d.paramQuery(queryStr)
 	have := c.get(URL)
-	assert.NotEmpty(c.t, have)
-	assert.Equal(c.t, byte('0'), have[0][0])
 
 	var m map[string]interface{}
 	err := json.Unmarshal(have[0][1:], &m)
@@ -291,7 +351,7 @@ func (c *v1PollingClient) connect(queryStr ...[]string) {
 func (c *v1PollingClient) send(body io.Reader) {
 	c.t.Helper()
 
-	URL := fmt.Sprintf("%s/socket.io/?EIO=%d&transport=polling&sid=%s&t=%d", c.base, c.eioVersion, c.eioSessionID, c.ts())
+	URL := fmt.Sprintf("%s/socket.io/?", c.base) + c.d.paramVersion() + c.d.paramTransport() + c.d.paramSID(c.eioSessionID).send() + c.d.paramTimestamp()
 	resp, err := c.client.Post(URL, "text/plain", body)
 	assert.NoError(c.t, err)
 
@@ -300,7 +360,7 @@ func (c *v1PollingClient) send(body io.Reader) {
 func (c *v1PollingClient) grab() (rtn []string) {
 	c.t.Helper()
 
-	URL := fmt.Sprintf("%s/socket.io/?EIO=%d&transport=polling&sid=%s&t=%d", c.base, c.eioVersion, c.eioSessionID, c.ts())
+	URL := fmt.Sprintf("%s/socket.io/?", c.base) + c.d.paramVersion() + c.d.paramTransport() + c.d.paramSID(c.eioSessionID).grab() + c.d.paramTimestamp()
 	have := c.get(URL)
 	for i := range have {
 		rtn = append(rtn, string(have[i]))
@@ -326,6 +386,7 @@ func (c *v1PollingClient) get(URL string) [][]byte {
 
 type v3PollingClient struct {
 	t *testing.T
+	d testData
 
 	keep40s bool
 
@@ -337,17 +398,11 @@ type v3PollingClient struct {
 	client *http.Client
 }
 
-func (c *v3PollingClient) ts() int64 { c.t.Helper(); return time.Now().UnixNano() }
 func (c *v3PollingClient) connect(extraStr ...[]string) {
 	c.t.Helper()
 
-	var query string
-	if len(extraStr[0]) > 0 {
-		query = "&" + strings.Join(extraStr[0], "&")
-	}
-
 	var err error
-	URL := fmt.Sprintf("%s/socket.io/?EIO=%d&transport=polling&t=%d%s", c.base, c.eioVersion, c.ts(), query)
+	URL := fmt.Sprintf("%s/socket.io/?", c.base) + c.d.paramVersion() + c.d.paramTransport() + c.d.paramTimestamp() + c.d.paramQuery(extraStr)
 
 	have := c.get(URL)
 	assert.NotEmpty(c.t, have)
@@ -365,7 +420,8 @@ func (c *v3PollingClient) connect(extraStr ...[]string) {
 		nsConnect = extraStr[1][0]
 	}
 
-	URL = fmt.Sprintf("%s/socket.io/?EIO=%d&transport=polling&sid=%s&t=%d%s", c.base, c.eioVersion, c.eioSessionID, c.ts(), query)
+	URL = fmt.Sprintf("%s/socket.io/?", c.base) + c.d.paramVersion() + c.d.paramTransport() + c.d.paramSID(c.eioSessionID).grab() + c.d.paramTimestamp() + c.d.paramQuery(extraStr)
+
 	resp, err := c.client.Post(URL, "text/plain", strings.NewReader(nsConnect))
 	assert.NoError(c.t, err)
 
@@ -374,7 +430,8 @@ func (c *v3PollingClient) connect(extraStr ...[]string) {
 func (c *v3PollingClient) send(body io.Reader) {
 	c.t.Helper()
 
-	URL := fmt.Sprintf("%s/socket.io/?EIO=%d&transport=polling&sid=%s&t=%d", c.base, c.eioVersion, c.eioSessionID, c.ts())
+	URL := fmt.Sprintf("%s/socket.io/?", c.base) + c.d.paramVersion() + c.d.paramTransport() + c.d.paramSID(c.eioSessionID).send() + c.d.paramTimestamp()
+
 	resp, err := c.client.Post(URL, "text/plain", body)
 	assert.NoError(c.t, err)
 
@@ -383,7 +440,8 @@ func (c *v3PollingClient) send(body io.Reader) {
 func (c *v3PollingClient) grab() (rtn []string) {
 	c.t.Helper()
 
-	URL := fmt.Sprintf("%s/socket.io/?EIO=%d&transport=polling&sid=%s&t=%d", c.base, c.eioVersion, c.eioSessionID, c.ts())
+	URL := fmt.Sprintf("%s/socket.io/?", c.base) + c.d.paramVersion() + c.d.paramTransport() + c.d.paramSID(c.eioSessionID).grab() + c.d.paramTimestamp()
+
 	have := c.get(URL)
 	for i := range have {
 		if i == 0 && len(have[i]) > 1 && have[i][1] == '0' && !c.keep40s {
