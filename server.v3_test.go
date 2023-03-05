@@ -30,11 +30,13 @@ func TestServerV3(t *testing.T) {
 	var EIOv = 4
 
 	runWithOptions := map[string]testParamsInFn{
-		"Polling": func(v3 socketio.Server, count int, want map[string][][]string, wait *sync.WaitGroup) testFn {
-			return PollingTestV3(opts, EIOv, v3, count, want, wait)
+		"Polling": func(testDataOpts ...testDataOptFunc) testFn {
+			testDataOpts = append(testDataOpts, func(d *testData) { d.version = EIOv }, func(d *testData) { d.transport.value = "polling" })
+			return PollingTestV3(opts, testDataOpts...)
 		},
-		"Websocket": func(v3 socketio.Server, count int, want map[string][][]string, wait *sync.WaitGroup) testFn {
-			return WebsocketTestV3(opts, EIOv, v3, count, want, wait)
+		"Websocket": func(testDataOpts ...testDataOptFunc) testFn {
+			testDataOpts = append(testDataOpts, func(d *testData) { d.version = EIOv }, func(d *testData) { d.transport.value = "websocket" })
+			return WebsocketTestV3(opts, testDataOpts...)
 		},
 	}
 
@@ -60,40 +62,46 @@ func TestServerV3(t *testing.T) {
 
 	for name, testParams := range integration {
 		for suffix, run := range runWithOptions {
-			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)))
+			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)...))
 		}
 	}
 }
 
-func PollingTestV3(opts []func(*testing.T), EIOv int, v3 socketio.Server, count int, want map[string][][]string, syncOn *sync.WaitGroup) testFn {
+func PollingTestV3(opts []func(*testing.T), testDataOpts ...testDataOptFunc) testFn {
 	return func(t *testing.T) {
 		for _, opt := range opts {
 			opt(t)
 		}
 
+		var d testData
+		for _, testOpt := range testDataOpts {
+			testOpt(&d)
+		}
+
 		t.Parallel()
 
 		var (
-			server = httptest.NewServer(v3)
-			client = make([]*testClient, count)
+			server = httptest.NewServer(d.server)
+			client = make([]*testClient, d.count)
 		)
 
 		defer server.Close()
 
-		for i := 0; i < count; i++ {
+		for i := 0; i < d.count; i++ {
 			client[i] = &testClient{polling: &v3PollingClient{
 				t:          t,
+				d:          d,
 				base:       server.URL,
 				client:     server.Client(),
 				buffer:     new(bytes.Buffer),
-				eioVersion: EIOv,
+				eioVersion: d.version,
 			}}
 
 			var queryStr, connStr []string
-			if q, ok := want["connect_query"]; ok {
+			if q, ok := d.want["connect_query"]; ok {
 				queryStr = q[i]
 			}
-			if c, ok := want["connect"]; ok {
+			if c, ok := d.want["connect"]; ok {
 				connStr = c[i]
 			}
 
@@ -101,12 +109,12 @@ func PollingTestV3(opts []func(*testing.T), EIOv int, v3 socketio.Server, count 
 		}
 
 		// waits for all of the events inside of a onConnection to complete...
-		syncOn.Wait()
+		d.syncOn.Wait()
 
 		var x int
 		reqSequence := []string{"send1", "grab1", "send2", "grab2"}
 		for _, reqType := range reqSequence {
-			if request, ok := want[reqType]; ok && strings.HasPrefix(reqType, "send") {
+			if request, ok := d.want[reqType]; ok && strings.HasPrefix(reqType, "send") {
 				var packetBuf = new(bytes.Buffer)
 
 				for i, packets := range request {
@@ -115,7 +123,7 @@ func PollingTestV3(opts []func(*testing.T), EIOv int, v3 socketio.Server, count 
 						continue
 					}
 
-					syncOn.Add(1)
+					d.syncOn.Add(1)
 					packetBuf.Reset()
 
 					for i, packet := range packets {
@@ -128,7 +136,7 @@ func PollingTestV3(opts []func(*testing.T), EIOv int, v3 socketio.Server, count 
 				}
 				continue
 			}
-			if request, ok := want[reqType]; ok && strings.HasPrefix(reqType, "grab") {
+			if request, ok := d.want[reqType]; ok && strings.HasPrefix(reqType, "grab") {
 				for i, want := range request {
 					x++
 					have := client[i].polling.grab()
@@ -138,48 +146,54 @@ func PollingTestV3(opts []func(*testing.T), EIOv int, v3 socketio.Server, count 
 			}
 		}
 
-		syncOn.Wait()
+		d.syncOn.Wait()
 
-		if xq, ok := want["connect_query"]; ok {
+		if xq, ok := d.want["connect_query"]; ok {
 			x += len(xq)
 		}
-		if xc, ok := want["connect"]; ok {
+		if xc, ok := d.want["connect"]; ok {
 			x += len(xc)
 		}
 
-		assert.Equal(t, count*len(want), x) // the wants were actually tested
+		assert.Equal(t, d.count*len(d.want), x) // the wants were actually tested
 	}
 }
 
-func WebsocketTestV3(opts []func(*testing.T), EIOv int, vX socketio.Server, count int, want map[string][][]string, syncOn *sync.WaitGroup) func(*testing.T) {
+func WebsocketTestV3(opts []func(*testing.T), testDataOpts ...testDataOptFunc) func(*testing.T) {
 	return func(t *testing.T) {
 		for _, opt := range opts {
 			opt(t)
 		}
 
+		var d testData
+		for _, testOpt := range testDataOpts {
+			testOpt(&d)
+		}
+
 		t.Parallel()
 
 		var (
-			server = httptest.NewServer(vX)
-			client = make([]*testClient, count)
+			server = httptest.NewServer(d.server)
+			client = make([]*testClient, d.count)
 		)
 
 		defer server.Close()
 
-		for i := 0; i < count; i++ {
+		for i := 0; i < d.count; i++ {
 			client[i] = &testClient{websocket: &v3WebsocketClient{
 				t:          t,
+				d:          d,
 				base:       server.URL,
 				client:     server.Client(),
 				buffer:     new(bytes.Buffer),
-				eioVersion: EIOv,
+				eioVersion: d.version,
 			}}
 
 			var queryStr, connStr []string
-			if q, ok := want["connect_query"]; ok {
+			if q, ok := d.want["connect_query"]; ok {
 				queryStr = q[i]
 			}
-			if c, ok := want["connect"]; ok {
+			if c, ok := d.want["connect"]; ok {
 				connStr = c[i]
 			}
 
@@ -187,12 +201,12 @@ func WebsocketTestV3(opts []func(*testing.T), EIOv int, vX socketio.Server, coun
 		}
 
 		// wait for all onConnection events to complete...
-		syncOn.Wait()
+		d.syncOn.Wait()
 
 		var x int
 		reqSequence := []string{"send1", "grab1", "send2", "grab2"}
 		for _, reqType := range reqSequence {
-			if request, ok := want[reqType]; ok && strings.HasPrefix(reqType, "send") {
+			if request, ok := d.want[reqType]; ok && strings.HasPrefix(reqType, "send") {
 
 				for i, packets := range request {
 					x++
@@ -200,7 +214,7 @@ func WebsocketTestV3(opts []func(*testing.T), EIOv int, vX socketio.Server, coun
 						continue
 					}
 
-					syncOn.Add(1)
+					d.syncOn.Add(1)
 
 					for _, packet := range packets {
 						time.Sleep(3 * time.Millisecond)
@@ -219,7 +233,7 @@ func WebsocketTestV3(opts []func(*testing.T), EIOv int, vX socketio.Server, coun
 				}
 				continue
 			}
-			if request, ok := want[reqType]; ok && strings.HasPrefix(reqType, "grab") {
+			if request, ok := d.want[reqType]; ok && strings.HasPrefix(reqType, "grab") {
 				for i, want := range request {
 					x++
 					have := client[i].websocket.grab()
@@ -230,20 +244,20 @@ func WebsocketTestV3(opts []func(*testing.T), EIOv int, vX socketio.Server, coun
 		}
 
 		// wait for all emitted events to complete...
-		syncOn.Wait()
+		d.syncOn.Wait()
 
 		// check that we hit every "send/grab" that we needed to check...
-		if xq, ok := want["connect_query"]; ok {
+		if xq, ok := d.want["connect_query"]; ok {
 			x += len(xq)
 		}
-		if xc, ok := want["connect"]; ok {
+		if xc, ok := d.want["connect"]; ok {
 			x += len(xc)
 		}
-		assert.Equal(t, count*len(want), x)
+		assert.Equal(t, d.count*len(d.want), x)
 	}
 }
 
-func SendingToTheClientV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToTheClientV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -271,10 +285,15 @@ func SendingToTheClientV3(t *testing.T) (socketio.Server, int, map[string][][]st
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func SendingToAllClientsExceptTheSenderV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsExceptTheSenderV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -304,10 +323,15 @@ func SendingToAllClientsExceptTheSenderV3(t *testing.T) (socketio.Server, int, m
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func SendingToAllClientsInGameRoomExceptSenderV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInGameRoomExceptSenderV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -342,10 +366,15 @@ func SendingToAllClientsInGameRoomExceptSenderV3(t *testing.T) (socketio.Server,
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -391,10 +420,15 @@ func SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV3(t *testing.T) (socke
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func SendingToAllClientsInGameRoomIncludingSenderV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInGameRoomIncludingSenderV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -429,10 +463,15 @@ func SendingToAllClientsInGameRoomIncludingSenderV3(t *testing.T) (socketio.Serv
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -480,10 +519,15 @@ func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV3(t *testing.T) (s
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -537,10 +581,15 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV3(t *testing.T)
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func SendingToIndividualSocketIDPrivateMessageV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToIndividualSocketIDPrivateMessageV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -578,10 +627,15 @@ func SendingToIndividualSocketIDPrivateMessageV3(t *testing.T) (socketio.Server,
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func SendingWithAcknowledgementV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingWithAcknowledgementV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -622,10 +676,15 @@ func SendingWithAcknowledgementV3(t *testing.T) (socketio.Server, int, map[strin
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func SendingToAllConnectedClientsV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingToAllConnectedClientsV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -656,7 +715,12 @@ func SendingToAllConnectedClientsV3(t *testing.T) (socketio.Server, int, map[str
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
 func NameTheTest(name string) socketio.Option {
@@ -665,7 +729,7 @@ func NameTheTest(name string) socketio.Option {
 	}
 }
 
-func OnEventV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func OnEventV3(t *testing.T) []testDataOptFunc {
 	o := testingOptionsV3
 	o = append(o, NameTheTest("OnEventV3"))
 
@@ -730,10 +794,15 @@ func OnEventV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func RejectTheClientV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func RejectTheClientV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -763,10 +832,15 @@ func RejectTheClientV3(t *testing.T) (socketio.Server, int, map[string][][]strin
 		return fmt.Errorf("not authorized")
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func SendingBinaryEventFromClientV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingBinaryEventFromClientV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -799,10 +873,15 @@ func SendingBinaryEventFromClientV3(t *testing.T) (socketio.Server, int, map[str
 		assert.Equal(t, expect, have)
 	}))
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
 
-func SendingBinaryAckFromClientV3(t *testing.T) (socketio.Server, int, map[string][][]string, *sync.WaitGroup) {
+func SendingBinaryAckFromClientV3(t *testing.T) []testDataOptFunc {
 	var (
 		v3   = socketio.NewServerV3(testingOptionsV3...)
 		wait = new(sync.WaitGroup)
@@ -850,5 +929,10 @@ func SendingBinaryAckFromClientV3(t *testing.T) (socketio.Server, int, map[strin
 		return nil
 	})
 
-	return v3, count, want, wait
+	return []testDataOptFunc{
+		func(d *testData) { d.server = v3 },
+		func(d *testData) { d.count = count },
+		func(d *testData) { d.want = want },
+		func(d *testData) { d.syncOn = wait },
+	}
 }
