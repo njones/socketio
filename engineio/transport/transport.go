@@ -39,6 +39,8 @@ type Transporter interface {
 
 type StartWriteBuffer func() bool
 
+func (StartWriteBuffer) Len() int { return 0 }
+
 type Transport struct {
 	id    SessionID
 	name  Name
