@@ -119,6 +119,9 @@ func (e Struct) Is(target error) bool {
 	if eStr, ok := target.(String); ok {
 		return e.e.Error() == eStr.Error()
 	}
+	if eStr, ok := target.(StringF); ok {
+		return e.e.Error() == eStr.Error()
+	}
 	for _, werr := range e.wrap {
 		if errors.Is(werr, target) {
 			return true
