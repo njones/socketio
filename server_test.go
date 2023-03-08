@@ -308,6 +308,8 @@ type v1PollingClient struct {
 	base   string
 	buffer *bytes.Buffer
 	client *http.Client
+
+	connect_buf map[string][][]byte
 }
 
 func (c *v1PollingClient) parse(body []byte) (rtn [][]byte) {
@@ -347,6 +349,11 @@ func (c *v1PollingClient) connect(queryStr ...[]string) {
 
 	c.eioSessionID, _ = m["sid"].(string)
 	assert.NotEmpty(c.t, c.eioSessionID)
+
+	if c.connect_buf == nil {
+		c.connect_buf = make(map[string][][]byte)
+	}
+	c.connect_buf[c.eioSessionID] = have[1:]
 }
 func (c *v1PollingClient) send(body io.Reader) {
 	c.t.Helper()
@@ -359,6 +366,13 @@ func (c *v1PollingClient) send(body io.Reader) {
 }
 func (c *v1PollingClient) grab() (rtn []string) {
 	c.t.Helper()
+
+	if len(c.connect_buf[c.eioSessionID]) > 0 {
+		for i := range c.connect_buf[c.eioSessionID] {
+			rtn = append(rtn, string(c.connect_buf[c.eioSessionID][i]))
+		}
+		delete(c.connect_buf, c.eioSessionID)
+	}
 
 	URL := fmt.Sprintf("%s/socket.io/?", c.base) + c.d.paramVersion() + c.d.paramTransport() + c.d.paramSID(c.eioSessionID).grab() + c.d.paramTimestamp()
 	have := c.get(URL)
