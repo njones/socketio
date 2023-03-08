@@ -19,16 +19,14 @@ func autoConnect(v1 *ServerV1, newPacket siop.NewPacket) func(transport eiot.Tra
 			return
 		}
 
+		sioPacket := newPacket().WithType(siop.ConnectPacket.Byte())
+		eioPacket := eiop.Packet{T: eiop.MessagePacket, D: sioPacket}
+		transport.Send(eioPacket)
+		transport.Send(eiop.Packet{T: eiop.NoopPacket, D: eiot.StartWriteBuffer(func() bool { return true })})
+
 		socket := siot.Socket{
 			Type:      siop.ConnectPacket.Byte(),
 			Namespace: "/",
-		}
-
-		if transport.Name() == eiot.Polling {
-			sioPacket := newPacket().WithType(siop.ConnectPacket.Byte())
-			eioPacket := eiop.Packet{T: eiop.MessagePacket, D: sioPacket}
-			transport.Send(eioPacket)
-			transport.Send(eiop.Packet{T: eiop.NoopPacket, D: eiot.StartWriteBuffer(func() bool { return true })})
 		}
 
 		if err := v1.doConnectPacket(socketID, socket, sioRequest(r)); err != nil {

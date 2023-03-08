@@ -90,6 +90,7 @@ Write:
 				}
 				break Write
 			case StartWriteBuffer:
+				packets = append(packets, packet)
 				if v() {
 					buffer.use = true
 					buffer.idx = len(packets)
