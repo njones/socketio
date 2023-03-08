@@ -59,13 +59,13 @@ func doV4(v4 *ServerV4, socketID SocketID, socket siot.Socket, req *Request) err
 
 	switch socket.Type {
 	case siop.ConnectPacket.Byte():
-		unlock := v4.prev.prev.prev.r()
+		unlock := v1.r()
 		tr := v4.tr()
 		unlock()
 
 		if err := v1.doConnectPacket(socketID, socket, req); err != nil {
 			if errors.Is(err, ErrNamespaceNotFound) {
-				tr.Send(socketID, serviceError(fmt.Errorf("%snvalid namespace", "I")), siop.WithNamespace(socket.Namespace), siop.WithType(byte(siop.ConnectErrorPacket)))
+				tr.Send(socketID, serviceError(fmt.Errorf("%valid namespace", "Inv")), siop.WithNamespace(socket.Namespace), siop.WithType(byte(siop.ConnectErrorPacket)))
 				return nil
 			}
 			tr.Send(socketID, serviceError(err), siop.WithType(byte(siop.ConnectErrorPacket)))
