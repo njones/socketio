@@ -18,6 +18,7 @@ func doConnectPacketV2(v2 *ServerV2) func(SocketID, siot.Socket, *Request) error
 		v2.setNsp(socket.Namespace)
 
 		if fn, ok := v2.onConnect[socket.Namespace]; ok {
+			tr.Send(socketID, nil, siop.WithType(byte(siop.ConnectPacket)), siop.WithNamespace(socket.Namespace))
 			return fn(&SocketV2{inSocketV2: v2.inSocketV2.clone(), req: req})
 		}
 		return ErrOnConnectSocket

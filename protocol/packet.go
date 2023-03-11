@@ -18,7 +18,7 @@ type Packet interface {
 // This is mainly used when creating new socket.io protocol transports.
 type NewPacket func() Packet
 
-// packet represets a basic socket.io packet of data (v0 through v5)
+// packet represents a basic socket.io packet of data (v0 through v5)
 type packet struct {
 	Type      packetType  `json:"type"`
 	Namespace packetNS    `json:"nsp"`
@@ -30,10 +30,14 @@ type packet struct {
 
 func (pac packet) Len() (n int) {
 	n += pac.Type.Len()
-	n += pac.Namespace.Len()
+	m := pac.Namespace.Len()
+	n += m
 	n += pac.AckID.Len()
 	if x, ok := pac.Data.(interface{ Len() int }); ok {
 		n += x.Len()
+	}
+	if m > 0 && n > m+1 {
+		n += 1 // for the extra namespace comma
 	}
 	return n
 }

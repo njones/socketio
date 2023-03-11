@@ -291,6 +291,8 @@ func defaultMarshalBinaryData(num int, r io.Reader) ([]byte, error) {
 
 func withPacketData(v interface{}) packetData {
 	switch val := v.(type) {
+	case nil:
+		return nil
 	case string:
 		return &packetDataString{x: &val}
 	case *string:
@@ -304,7 +306,7 @@ func withPacketData(v interface{}) packetData {
 	case error:
 		return readWriteErr{val}
 	default:
-		return readWriteErr{ErrUnexpectedPacketType.F(val)}
+		return readWriteErr{ErrUnexpectedPacketType.F(val).KV("fn", "withPacketData")}
 	}
 }
 

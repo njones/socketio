@@ -5,24 +5,18 @@ import (
 	"fmt"
 	"net/http"
 
-	eiop "github.com/njones/socketio/engineio/protocol"
 	eiot "github.com/njones/socketio/engineio/transport"
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
 )
 
-func autoConnect(v1 *ServerV1, newPacket siop.NewPacket) func(transport eiot.Transporter, r *http.Request) {
+func autoConnect(v1 *ServerV1) func(transport eiot.Transporter, r *http.Request) {
 	return func(transport eiot.Transporter, r *http.Request) {
 		socketID, err := v1.tr().Add(transport)
 		if err != nil {
 			v1.tr().Send(socketID, serviceError(err), siop.WithType(siop.ErrorPacket.Byte()))
 			return
 		}
-
-		sioPacket := newPacket().WithType(siop.ConnectPacket.Byte())
-		eioPacket := eiop.Packet{T: eiop.MessagePacket, D: sioPacket}
-		transport.Send(eioPacket)
-		transport.Send(eiop.Packet{T: eiop.NoopPacket, D: eiot.StartWriteBuffer(func() bool { return true })})
 
 		socket := siot.Socket{
 			Type:      siop.ConnectPacket.Byte(),
@@ -85,13 +79,18 @@ func doV1(v1 *ServerV1, socketID SocketID, socket siot.Socket, req *Request) err
 // doConnectPacket the function
 func doConnectPacket(v1 *ServerV1) func(SocketID, siot.Socket, *Request) error {
 	return func(socketID SocketID, socket siot.Socket, req *Request) (err error) {
-		v1.tr().Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))
+		unlock := v1.r()
+		tr := v1.tr()
+		unlock()
+
+		tr.Join(socket.Namespace, socketID, socketID.Room(socketIDPrefix))
 
 		v1.setPrefix()
 		v1.setSocketID(socketID)
 		v1.setNsp(socket.Namespace)
 
 		if fn, ok := v1.onConnect[socket.Namespace]; ok {
+			tr.Send(socketID, nil, siop.WithType(byte(siop.ConnectPacket)), siop.WithNamespace(socket.Namespace))
 			return fn(&SocketV1{inSocketV1: v1.inSocketV1.clone(), req: req, Connected: true})
 		}
 		return ErrOnConnectSocket
