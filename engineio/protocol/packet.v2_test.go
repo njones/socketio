@@ -16,7 +16,7 @@ import (
 )
 
 func TestPacketV2(t *testing.T) {
-	var opts = []func(*testing.T) bool{}
+	var opts = []func(*testing.T){}
 
 	type (
 		testFn          func(*testing.T)
@@ -28,9 +28,7 @@ func TestPacketV2(t *testing.T) {
 		"Decode": func(output PacketV2, input string, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					if !opt(t) {
-						return
-					}
+					opt(t)
 				}
 
 				t.Parallel()
@@ -45,9 +43,7 @@ func TestPacketV2(t *testing.T) {
 		"Encode": func(input PacketV2, output string, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					if !opt(t) {
-						return
-					}
+					opt(t)
 				}
 
 				t.Parallel()
@@ -62,9 +58,7 @@ func TestPacketV2(t *testing.T) {
 		"ReadPacket": func(output PacketV2, input string, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					if !opt(t) {
-						return
-					}
+					opt(t)
 				}
 
 				t.Parallel()
@@ -80,9 +74,7 @@ func TestPacketV2(t *testing.T) {
 		"WritePacket": func(input PacketV2, output string, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					if !opt(t) {
-						return
-					}
+					opt(t)
 				}
 
 				t.Parallel()
@@ -99,9 +91,7 @@ func TestPacketV2(t *testing.T) {
 		"Short Decode": func(output PacketV2, input string, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					if !opt(t) {
-						return
-					}
+					opt(t)
 				}
 
 				t.Parallel()
@@ -117,9 +107,7 @@ func TestPacketV2(t *testing.T) {
 		"Short Encode": func(input PacketV2, output string, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					if !opt(t) {
-						return
-					}
+					opt(t)
 				}
 
 				t.Parallel()
@@ -135,9 +123,7 @@ func TestPacketV2(t *testing.T) {
 		"Short ReadPacket": func(output PacketV2, input string, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					if !opt(t) {
-						return
-					}
+					opt(t)
 				}
 
 				t.Parallel()
@@ -154,9 +140,7 @@ func TestPacketV2(t *testing.T) {
 		"Short WritePacket": func(input PacketV2, output string, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
-					if !opt(t) {
-						return
-					}
+					opt(t)
 				}
 
 				t.Parallel()

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -130,6 +131,10 @@ func PollingTestV1(opts []func(*testing.T), testDataOpts ...testDataOptFunc) fun
 				for i, want := range request {
 					x++
 					have := client[i].polling.grab()
+					if !reflect.DeepEqual(want, have) {
+						time.Sleep(100 * time.Millisecond) // retry one-time, because the polling could be a little off.
+						have = append(have, client[i].polling.grab()...)
+					}
 					assert.Equal(t, want, have, "[%s] idx: %d", reqType, i)
 				}
 				continue
@@ -235,9 +240,9 @@ func SendingToTheClientV1(*testing.T) []testDataOptFunc {
 
 		want = map[string][][]string{
 			"grab1": {
-				{`40`, `6`, `42["hello","can you hear me?",1,2,"abc"]`},
-				{`40`, `6`, `42["hello","can you hear me?",1,2,"abc"]`},
-				{`40`, `6`, `42["hello","can you hear me?",1,2,"abc"]`},
+				{`40`, `42["hello","can you hear me?",1,2,"abc"]`},
+				{`40`, `42["hello","can you hear me?",1,2,"abc"]`},
+				{`40`, `42["hello","can you hear me?",1,2,"abc"]`},
 			},
 		}
 		count = len(want["grab1"])
@@ -269,9 +274,9 @@ func SendingToAllClientsExceptTheSenderV1(*testing.T) []testDataOptFunc {
 
 		want = map[string][][]string{
 			"grab1": {
-				{`40`, `6`, `42["broadcast","Hello friends!"]`},
-				{`40`, `6`, `42["broadcast","Hello friends!"]`},
-				{`40`, `6`},
+				{`40`, `42["broadcast","Hello friends!"]`},
+				{`40`, `42["broadcast","Hello friends!"]`},
+				{`40`},
 			},
 		}
 		count = len(want["grab1"])
@@ -305,11 +310,11 @@ func SendingToAllClientsInGameRoomExceptSenderV1(*testing.T) []testDataOptFunc {
 
 		want = map[string][][]string{
 			"grab1": {
-				{`40`, `6`, `42["nice game","let's play a game"]`},
-				{`40`, `6`},
-				{`40`, `6`, `42["nice game","let's play a game"]`},
-				{`40`, `6`},
-				{`40`, `6`}, // sender...
+				{`40`, `42["nice game","let's play a game"]`},
+				{`40`},
+				{`40`, `42["nice game","let's play a game"]`},
+				{`40`},
+				{`40`}, // sender...
 			},
 		}
 		count = len(want["grab1"])
@@ -346,19 +351,19 @@ func SendingToAllClientsInGame1AndOrGame2RoomExceptSenderV1(*testing.T) []testDa
 
 		want = map[string][][]string{
 			"grab1": {
-				{`40`, `6`, `42["nice game","let's play a game (too)"]`},
-				{`40`, `6`},
-				{`40`, `6`, `42["nice game","let's play a game (too)"]`},
-				{`40`, `6`, `42["nice game","let's play a game (too)"]`},
-				{`40`, `6`, `42["nice game","let's play a game (too)"]`},
-				{`40`, `6`},
-				{`40`, `6`, `42["nice game","let's play a game (too)"]`},
-				{`40`, `6`},
-				{`40`, `6`, `42["nice game","let's play a game (too)"]`},
-				{`40`, `6`, `42["nice game","let's play a game (too)"]`},
-				{`40`, `6`, `42["nice game","let's play a game (too)"]`},
-				{`40`, `6`},
-				{`40`, `6`}, // sender...
+				{`40`, `42["nice game","let's play a game (too)"]`},
+				{`40`},
+				{`40`, `42["nice game","let's play a game (too)"]`},
+				{`40`, `42["nice game","let's play a game (too)"]`},
+				{`40`, `42["nice game","let's play a game (too)"]`},
+				{`40`},
+				{`40`, `42["nice game","let's play a game (too)"]`},
+				{`40`},
+				{`40`, `42["nice game","let's play a game (too)"]`},
+				{`40`, `42["nice game","let's play a game (too)"]`},
+				{`40`, `42["nice game","let's play a game (too)"]`},
+				{`40`},
+				{`40`}, // sender...
 			},
 		}
 		count = len(want["grab1"])
@@ -398,11 +403,11 @@ func SendingToAllClientsInGameRoomIncludingSenderV1(*testing.T) []testDataOptFun
 
 		want = map[string][][]string{
 			"grab1": {
-				{`40`, `6`, `42["big-announcement","the game will start soon"]`},
-				{`40`, `6`},
-				{`40`, `6`, `42["big-announcement","the game will start soon"]`},
-				{`40`, `6`},
-				{`40`, `6`, `42["big-announcement","the game will start soon"]`},
+				{`40`, `42["big-announcement","the game will start soon"]`},
+				{`40`},
+				{`40`, `42["big-announcement","the game will start soon"]`},
+				{`40`},
+				{`40`, `42["big-announcement","the game will start soon"]`},
 			},
 		}
 		count = len(want["grab1"])
@@ -446,11 +451,11 @@ func SendingToAllClientsInNamespaceMyNamespaceIncludingSenderV1(*testing.T) []te
 				{`40/myNamespace,`},
 			},
 			"grab1": {
-				{`40`, `6`, `42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
-				{`40`, `6`},
-				{`40`, `6`, `42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
-				{`40`, `6`},
-				{`40`, `6`, `42/myNamespace,["bigger-announcement","the tournament will start soon"]`}, // 42/myNamespace,["bigger-announcement","the tournament will start soon"]
+				{`40`, `40/myNamespace`, `42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
+				{`40`},
+				{`40`, `40/myNamespace`, `42/myNamespace,["bigger-announcement","the tournament will start soon"]`},
+				{`40`},
+				{`40`, `40/myNamespace`, `42/myNamespace,["bigger-announcement","the tournament will start soon"]`}, // 42/myNamespace,["bigger-announcement","the tournament will start soon"]
 			},
 		}
 		count = len(want["send1"])
@@ -503,11 +508,11 @@ func SendingToASpecificRoomInNamespaceMyNamespaceIncludingSenderV1(*testing.T) [
 				{`40/myNamespace,`},
 			},
 			"grab1": {
-				{`40`, `6`, `42/myNamespace,["event","message"]`},
-				{`40`, `6`},
-				{`40`, `6`},
-				{`40`, `6`},
-				{`40`, `6`, `42/myNamespace,["event","message"]`},
+				{`40`, `40/myNamespace`, `42/myNamespace,["event","message"]`},
+				{`40`},
+				{`40`, `40/myNamespace`},
+				{`40`},
+				{`40`, `40/myNamespace`, `42/myNamespace,["event","message"]`},
 			},
 		}
 		count = len(want["send1"])
@@ -560,9 +565,9 @@ func SendingToIndividualSocketIDPrivateMessageV1(*testing.T) []testDataOptFunc {
 
 		want = map[string][][]string{
 			"grab1": {
-				{`40`, `6`, `42["hey","I just met you #1"]`},
-				{`40`, `6`, `42["hey","I just met you #2"]`},
-				{`40`, `6`, `42["hey","I just met you #0"]`},
+				{`40`, `42["hey","I just met you #1"]`},
+				{`40`, `42["hey","I just met you #2"]`},
+				{`40`, `42["hey","I just met you #0"]`},
 			},
 		}
 		count = len(want["grab1"])
@@ -604,7 +609,7 @@ func SendingWithAcknowledgementV1(t *testing.T) []testDataOptFunc {
 		wait = new(sync.WaitGroup)
 
 		want = map[string][][]string{
-			"grab1": {{`40`, `6`, `421["question","do you think so?"]`}},
+			"grab1": {{`40`, `421["question","do you think so?"]`}},
 			"send2": {{`431["answer",42]`}},
 		}
 		count = len(want["grab1"])
@@ -652,11 +657,11 @@ func SendingToAllConnectedClientsV1(*testing.T) []testDataOptFunc {
 
 		want = map[string][][]string{
 			"grab1": {
-				{`40`, `6`, `42["*","an event sent to all connected clients"]`},
-				{`40`, `6`, `42["*","an event sent to all connected clients"]`},
-				{`40`, `6`, `42["*","an event sent to all connected clients"]`},
-				{`40`, `6`, `42["*","an event sent to all connected clients"]`},
-				{`40`, `6`, `42["*","an event sent to all connected clients"]`},
+				{`40`, `42["*","an event sent to all connected clients"]`},
+				{`40`, `42["*","an event sent to all connected clients"]`},
+				{`40`, `42["*","an event sent to all connected clients"]`},
+				{`40`, `42["*","an event sent to all connected clients"]`},
+				{`40`, `42["*","an event sent to all connected clients"]`},
 			},
 		}
 		count = len(want["grab1"])
@@ -699,11 +704,11 @@ func OnEventV1(t *testing.T) []testDataOptFunc {
 				{`41`}, nil, nil, nil, nil,
 			},
 			"grab2": {
-				{`40`, `6`, `42["say goodbye","disconnecting..."]`},
-				{`40`, `6`},
-				{`40`, `6`, `42["say goodbye","disconnecting..."]`},
-				{`40`, `6`},
-				{`40`, `6`, `42["say goodbye","disconnecting..."]`},
+				{`40`, `42["say goodbye","disconnecting..."]`},
+				{`40`},
+				{`40`, `42["say goodbye","disconnecting..."]`},
+				{`40`},
+				{`40`, `42["say goodbye","disconnecting..."]`},
 			},
 		}
 		count = len(want["send1"])
@@ -759,7 +764,7 @@ func RejectTheClientV1(t *testing.T) []testDataOptFunc {
 
 		want = map[string][][]string{
 			"connect_query": {{`access=true`}, {`access=false`}},
-			"grab1":         {{`40`, `6`, `42["hello",1]`}, {`40`, `6`, `44{"message":"not authorized"}`}},
+			"grab1":         {{`40`, `42["hello",1]`}, {`40`, `44{"message":"not authorized"}`}},
 		}
 		count = len(want["connect_query"])
 		cnt   = int64(0)

@@ -379,6 +379,7 @@ func (c *v1PollingClient) grab() (rtn []string) {
 	for i := range have {
 		rtn = append(rtn, string(have[i]))
 	}
+
 	return rtn
 }
 func (c *v1PollingClient) get(URL string) [][]byte {
