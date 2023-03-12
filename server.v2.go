@@ -26,7 +26,7 @@ func NewServerV2(opts ...Option) *ServerV2 {
 	v1 := v2.prev
 	v1.eio = eio.NewServerV3(
 		eio.WithPath(*v1.path),
-		eio.WithInitialPackets(autoConnect(v1, siop.NewPacketV2)),
+		eio.WithInitialPackets(autoConnect(v1)),
 	).(eio.EIOServer) // v2 uses the default engineio protocol v3
 	v1.eio.With(opts...)
 

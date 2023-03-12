@@ -9,20 +9,33 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func (d testData) rawPacketV5() PacketV5 { return d.rawPacket.(PacketV5) }
+func (d testData) altPacketV5() PacketV5 { return (d.altPacket).(PacketV5) }
+
 func TestPacketV5(t *testing.T) {
 	var opts = []func(*testing.T){}
 
 	type (
 		testFn          func(*testing.T)
-		testParamsInFn  func(PacketV5, [][]byte, error) testFn
-		testParamsOutFn func(*testing.T) (PacketV5, [][]byte, error)
+		testParamsInFn  func(...testDataOptFunc) testFn
+		testParamsOutFn func(*testing.T) []testDataOptFunc
 	)
 
 	runWithOptions := map[string]testParamsInFn{
-		"ReadFrom": func(input PacketV5, output [][]byte, xErr error) testFn {
+		"ReadFrom": func(testDataOpts ...testDataOptFunc) testFn { // func(input PacketV5, output [][]byte, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
 					opt(t)
+				}
+
+				var d testData
+				for _, testDataOpt := range testDataOpts {
+					testDataOpt(&d)
+				}
+
+				input, output, xErr := d.rawPacketV5(), d.rawByteSlice, d.err
+				if d.altPacket != nil {
+					input = d.altPacketV5()
 				}
 
 				var have = new(bytes.Buffer)
@@ -40,11 +53,18 @@ func TestPacketV5(t *testing.T) {
 				}
 			}
 		},
-		"Write": func(output PacketV5, input [][]byte, xErr error) testFn {
+		"Write": func(testDataOpts ...testDataOptFunc) testFn { // func(output PacketV5, input [][]byte, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
 					opt(t)
 				}
+
+				var d testData
+				for _, testDataOpt := range testDataOpts {
+					testDataOpt(&d)
+				}
+
+				input, output, xErr := d.rawByteSlice, d.rawPacketV5(), d.err
 
 				var have PacketV5
 				n, err := (&have).Write(input[0])
@@ -86,10 +106,20 @@ func TestPacketV5(t *testing.T) {
 				}
 			}
 		},
-		"WriteTo": func(input PacketV5, output [][]byte, xErr error) testFn {
+		"WriteTo": func(testDataOpts ...testDataOptFunc) testFn { //  func(input PacketV5, output [][]byte, xErr error) testFn {
 			return func(t *testing.T) {
 				for _, opt := range opts {
 					opt(t)
+				}
+
+				var d testData
+				for _, testDataOpt := range testDataOpts {
+					testDataOpt(&d)
+				}
+
+				input, output, xErr := d.rawPacketV5(), d.rawByteSlice, d.err
+				if d.altPacket != nil {
+					input = d.altPacketV5()
 				}
 
 				var have = new(bytes.Buffer)
@@ -110,67 +140,99 @@ func TestPacketV5(t *testing.T) {
 	}
 
 	spec := map[string]testParamsOutFn{
-		"CONNECT": func(*testing.T) (PacketV5, [][]byte, error) {
+		"CONNECT": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{[]byte(`0`)}
 			asPacket := *NewPacketV5().WithNamespace("/").(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"CONNECT with Payload": func(*testing.T) (PacketV5, [][]byte, error) {
+		"CONNECT with Payload": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{[]byte(`0{"token":"123"}`)}
 			asPacket := *NewPacketV5().
 				WithNamespace("/").
 				WithData(map[string]interface{}{"token": "123"}).(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"CONNECT /admin with Payload": func(*testing.T) (PacketV5, [][]byte, error) {
+		"CONNECT /admin with Payload": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{[]byte(`0/admin,{"token":"123"}`)}
 			asPacket := *NewPacketV5().
 				WithNamespace("/admin").
 				WithData(map[string]interface{}{"token": "123"}).(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"DISCONNECT": func(*testing.T) (PacketV5, [][]byte, error) {
+		"DISCONNECT": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{[]byte(`1/admin`)}
 			asPacket := *NewPacketV5().
 				WithType(DisconnectPacket.Byte()).
 				WithNamespace("/admin").(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"EVENT": func(*testing.T) (PacketV5, [][]byte, error) {
+		"EVENT": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{[]byte(`2["hello",1]`)}
 			asPacket := *NewPacketV5().
 				WithType(EventPacket.Byte()).
 				WithNamespace("/").
 				WithData([]interface{}{"hello", 1.0}).(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"EVENT with AckID": func(*testing.T) (PacketV5, [][]byte, error) {
+		"EVENT with AckID": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{[]byte(`2/admin,456["project:delete",123]`)}
 			asPacket := *NewPacketV5().
 				WithType(EventPacket.Byte()).
 				WithNamespace("/admin").
 				WithData([]interface{}{"project:delete", 123.0}).
 				WithAckID(456).(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"ACK": func(*testing.T) (PacketV5, [][]byte, error) {
+		"ACK": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{[]byte(`3/admin,456[]`)}
 			asPacket := *NewPacketV5().
 				WithType(AckPacket.Byte()).
 				WithNamespace("/admin").
 				WithData([]interface{}{}).
 				WithAckID(456).(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"ERROR": func(*testing.T) (PacketV5, [][]byte, error) {
+		"ERROR": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{[]byte(`4/admin,"Not authorized"`)}
 			asPacket := *NewPacketV5().
 				WithType(ErrorPacket.Byte()).
 				WithNamespace("/admin").
 				WithData(&notAuthorized).(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"BINARY EVENT": func(*testing.T) (PacketV5, [][]byte, error) {
+		"BINARY EVENT": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{
 				[]byte(`51-["hello",{"_placeholder":true,"num":0}]`),
 				{0x01, 0x02, 0x03},
@@ -179,9 +241,13 @@ func TestPacketV5(t *testing.T) {
 				WithType(BinaryEventPacket.Byte()).
 				WithNamespace("/").
 				WithData([]interface{}{"hello", bytes.NewReader([]byte{0x01, 0x02, 0x03})}).(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"BINARY EVENT with AckID": func(*testing.T) (PacketV5, [][]byte, error) {
+		"BINARY EVENT with AckID": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{
 				[]byte(`51-/admin,456["hello",{"_placeholder":true,"num":0}]`),
 				{0x01, 0x02, 0x03},
@@ -191,9 +257,13 @@ func TestPacketV5(t *testing.T) {
 				WithNamespace("/admin").
 				WithData([]interface{}{"hello", bytes.NewReader([]byte{0x01, 0x02, 0x03})}).
 				WithAckID(456).(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"BINARY ACK": func(*testing.T) (PacketV5, [][]byte, error) {
+		"BINARY ACK": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{
 				[]byte(`61-/admin,456[{"_placeholder":true,"num":0}]`),
 				{0x03, 0x02, 0x01},
@@ -203,36 +273,57 @@ func TestPacketV5(t *testing.T) {
 				WithNamespace("/admin").
 				WithData([]interface{}{bytes.NewReader([]byte{0x03, 0x02, 0x01})}).
 				WithAckID(456).(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
 
 		// extra
-		"CONNECT /admin ns": func(*testing.T) (PacketV5, [][]byte, error) {
+		"CONNECT /admin ns": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{[]byte(`0/admin`)}
 			asPacket := *NewPacketV5().
 				WithNamespace("/admin").(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"CONNECT /admin ns and extra info": func(*testing.T) (PacketV5, [][]byte, error) {
+		"CONNECT /admin ns and extra info": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{[]byte(`0/admin?token=1234&uid=abcd`)}
 			asPacket := *NewPacketV5().
-				WithNamespace("/admin?token=1234&uid=abcd").(*PacketV5)
-			return asPacket, asBytes, nil
+				WithNamespace("/admin").(*PacketV5)
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) {
+					as2Packet := asPacket
+					as2Packet.WithNamespace("/admin?token=1234&uid=abcd")
+					d.altPacket = as2Packet
+				},
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
-		"ACK no namespace": func(*testing.T) (PacketV5, [][]byte, error) {
+		"ACK no namespace": func(*testing.T) []testDataOptFunc {
 			asBytes := [][]byte{[]byte(`3456["make",123]`)}
 			asPacket := *NewPacketV5().
 				WithType(AckPacket.Byte()).
 				WithNamespace("/").
 				WithData([]interface{}{"make", 123}).
 				WithAckID(456).(*PacketV5)
-			return asPacket, asBytes, nil
+			return []testDataOptFunc{
+				func(d *testData) { d.rawPacket = asPacket },
+				func(d *testData) { d.rawByteSlice = asBytes },
+				func(d *testData) { d.err = nil },
+			}
 		},
 	}
 
 	for name, testParams := range spec {
 		for suffix, run := range runWithOptions {
-			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)))
+			t.Run(fmt.Sprintf("%s.%s", name, suffix), run(testParams(t)...))
 		}
 	}
 }

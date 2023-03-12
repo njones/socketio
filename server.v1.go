@@ -45,7 +45,7 @@ func NewServerV1(opts ...Option) *ServerV1 {
 
 	v1.eio = eio.NewServerV2(
 		eio.WithPath(*v1.path),
-		eio.WithInitialPackets(autoConnect(v1, siop.NewPacketV2)),
+		eio.WithInitialPackets(autoConnect(v1)),
 	).(eio.EIOServer)
 	v1.eio.With(opts...)
 
@@ -76,7 +76,6 @@ func (v1 *ServerV1) new(opts ...Option) Server {
 	v1.inSocketV1.binary = true   // for the v1 implementation this always is set to true
 	v1.inSocketV1.compress = true // for the v1 implementation this always is set to true
 
-	// v1.inSocketV1.tr = func() siot.Transporter { return v1.transport }
 	v1.inSocketV1.setTransporter(v1.transport)
 
 	return v1

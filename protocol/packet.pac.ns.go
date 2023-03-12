@@ -1,5 +1,7 @@
 package protocol
 
+import "bytes"
+
 // packetNS represents the Namespace part of a SocketIO packet
 type packetNS string
 
@@ -7,7 +9,7 @@ func (x packetNS) Len() int {
 	if x == "/" || x == "" {
 		return 0
 	}
-	return len(x) + 1 // +1 for the comma
+	return len(x)
 }
 
 // Read reads the Namespace string to the p byte slice. If the p byte slice is
@@ -51,6 +53,10 @@ func (x *packetNS) Write(p []byte) (n int, err error) {
 		}
 		switch val {
 		case ',':
+			// Fix github:#61 Removing query parameters from the Namespace
+			if idxQ := bytes.Index(data, []byte{'?'}); idxQ > -1 {
+				data = data[:idxQ]
+			}
 			*x = packetNS(string(data))
 			return i + 1, nil
 		}
@@ -58,8 +64,13 @@ func (x *packetNS) Write(p []byte) (n int, err error) {
 	}
 
 	if (len(data) - size) == len(p) {
+		readSize := len(data)
+		// Fix github:#61 Removing query parameters from the Namespace
+		if idxQ := bytes.Index(data, []byte{'?'}); idxQ > -1 {
+			data = data[:idxQ]
+		}
 		*x = packetNS(string(data))
-		return len(data) - size, nil
+		return readSize - size, nil
 	}
 
 	return len(data) - size, ErrShortWrite
