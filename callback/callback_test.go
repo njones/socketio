@@ -1,6 +1,7 @@
 package callback
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -10,6 +11,7 @@ import (
 	"github.com/njones/socketio/serialize"
 )
 
+// eventCallback is just a wrapper function that will fake a callback. It's needed only for these examples.
 func eventCallback(in ...interface{}) func(interface{ Callback(...interface{}) error }) error {
 	return func(fn interface{ Callback(...interface{}) error }) error {
 		return fn.Callback(in...)
@@ -90,6 +92,27 @@ func ExampleWrap() {
 		},
 	)
 
+	fmt.Println("\n====")
+
+	eventCallback(map[string]interface{}{"Got 5 on it": "Luniz & Michael Marshall"})(
+
+		// Wrap takes in an object that represents a function
+		// with parameters and an error output. Note how the
+		// output of the function is a function that accepts
+		// the parameters as arguments.
+		Wrap{
+			Parameters: []serialize.Serializable{serialize.MapParam},
+			Func: func() interface{} {
+				return func(kv map[string]interface{}) error {
+					for k, v := range kv {
+						fmt.Printf("%s: %v\n", k, v)
+					}
+					return nil
+				}
+			},
+		},
+	)
+
 	// Output:
 	// Peter Pan
 	// Wendy Darling
@@ -98,6 +121,8 @@ func ExampleWrap() {
 	// This takes: too
 	// To make my: 3.141592653589793
 	// Stream out: FORE
+	// ====
+	// Got 5 on it: Luniz & Michael Marshall
 }
 
 type CustomWrap func(string, string) error
@@ -129,4 +154,54 @@ func ExampleCustomWrap() {
 	// Peter Pan
 	// Wendy Darling
 	// Error <nil>
+}
+
+type CustomWrapMap func(map[string]interface{}) error
+
+func (cc CustomWrapMap) Callback(data ...interface{}) error {
+	a, aOK := data[0].(string)
+
+	if !aOK {
+		return fmt.Errorf("bad parameters")
+	}
+
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(a), &m); err != nil {
+		return err
+	}
+
+	return cc(m)
+}
+
+func ExampleCustomWrapMap() {
+
+	eventCallback(`{"pirate":"Captain Hook"}`)(CustomWrapMap(func(kv map[string]interface{}) error {
+		if data, ok := kv["pirate"]; ok {
+			fmt.Println(data)
+		}
+		return nil
+	}))
+
+	errParse := eventCallback(`not-a-map`)(CustomWrapMap(func(kv map[string]interface{}) error {
+		if data, ok := kv["pirate"]; ok {
+			fmt.Println(data)
+		}
+		return nil
+	}))
+
+	errCallback := eventCallback(`{"key":"value"}`)(CustomWrapMap(func(kv map[string]interface{}) error {
+		if data, ok := kv["pirate"]; ok {
+			fmt.Println(data)
+			return nil
+		}
+		return fmt.Errorf("no key found")
+	}))
+
+	fmt.Println("Error:", errParse)
+	fmt.Println("Error:", errCallback)
+
+	// Output:
+	// Captain Hook
+	// Error: invalid character 'o' in literal null (expecting 'u')
+	// Error: no key found
 }
