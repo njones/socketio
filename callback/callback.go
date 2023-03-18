@@ -1,6 +1,7 @@
 package callback
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -102,6 +103,13 @@ func (fn Wrap) Callback(data ...interface{}) (err error) {
 			in[i] = reflect.ValueOf(data[i].(error))
 		case io.Reader:
 			in[i] = reflect.ValueOf(data[i].(io.Reader))
+		case map[string]interface{}:
+			b, err := json.Marshal(data[i])
+			if err != nil {
+				return err
+			}
+			val.Unserialize(string(b))
+			in[i] = reflect.ValueOf(val.(inter).Interface())
 		default:
 			v = fmt.Sprintf("%v", data[i]) // this should work for scalar types
 			val.Unserialize(v)
