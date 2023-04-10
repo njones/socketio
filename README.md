@@ -76,6 +76,49 @@ func main() {
 }
 ```
 
+### A more complicated example: emitting and listening to a custom event
+```go
+import (
+	"log"
+	"net/http"
+	"time"
+
+	sio "github.com/njones/socketio"
+	eio "github.com/njones/socketio/engineio"
+	eiot "github.com/njones/socketio/engineio/transport"
+	ser "github.com/njones/socketio/serialize"
+)
+
+// Define a custom wrapper 
+type CustomWrap func(string, string) error
+
+// Define your callback
+func (cc CustomWrap) Callback(data ...interface{}) error {
+	a, aOK := data[0].(string)
+	b, bOK := data[1].(string)
+
+	if !aOK || !bOK {
+		return fmt.Errorf("bad parameters")
+	}
+
+	return cc(a, b)
+}
+
+func main() {
+	port := ":3000"
+    server := socketio.NewServer()
+    server.OnConnect(func(socket *sio.SocketV4) error {
+         // Implement your callback for a custom event
+         socket.On("myEvent", CustomWrap(func(a string, b string) error{
+            socket.emit("hello", a, b)
+            return nil
+         })
+    }
+	log.Printf("serving port %s...\n", port)
+	log.Fatal(http.ListenAndServe(port, server))
+}
+```
+
 ## TODO
 
 The following is in no particular order. Please open an Issue for priority or open a PR to contribute to this list.
