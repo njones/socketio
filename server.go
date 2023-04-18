@@ -1,8 +1,10 @@
 package socketio
 
 import (
+	"encoding/hex"
 	"math/rand"
 	"net/http"
+	"time"
 
 	eios "github.com/njones/socketio/engineio/session"
 	seri "github.com/njones/socketio/serialize"
@@ -66,22 +68,28 @@ type rawTransport interface {
 	Transport(siot.SocketID) *siot.Transport
 }
 
-func socketIDQuickPrefix() string {
-	src := rand.NewSource(42)
-	rnd := rand.New(src)
+var _socketIDQuickPrefix = func(now time.Time) func() string {
+	return func() string {
+		src := rand.NewSource(now.UnixNano())
+		rnd := rand.New(src)
 
-	cards := [][]rune{
-		{127137, 127150}, // spades
-		{127153, 127166}, // hearts
-		{127169, 127182}, // diamonds
-		{127185, 127198}, // clubs
-	}
+		cards := [][]rune{
+			{127137, 127150}, // spades
+			{127153, 127166}, // hearts
+			{127169, 127182}, // diamonds
+			{127185, 127198}, // clubs
+		}
 
-	prefix := make([]rune, 5)
-	for i := range prefix {
-		suit := rnd.Intn(4)
-		card := int32(rnd.Intn(int(cards[suit][1]-cards[suit][0]-1))) + cards[suit][0]
-		prefix[i] = card
+		prefix := make([]rune, 5)
+		for i := range prefix {
+			suit := rnd.Intn(4)
+			card := int32(rnd.Intn(int(cards[suit][1]-cards[suit][0]-1))) + cards[suit][0]
+			prefix[i] = card
+		}
+
+		enc := hex.EncodeToString([]byte(string(prefix)))
+		return enc + "::"
 	}
-	return string(prefix) + "::"
 }
+
+var socketIDQuickPrefix = _socketIDQuickPrefix(time.Now())
