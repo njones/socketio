@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -19,6 +20,58 @@ import (
 )
 
 var testingOptionsV4 = []socketio.Option{engineio.WithPingTimeout(1 * time.Second), engineio.WithPingInterval(500 * time.Millisecond)}
+
+func TestSocketIOPathV4(t *testing.T) {
+
+	tests := map[string]struct {
+		withPath string
+		reqPath  string
+		expect   string
+	}{
+		"no path": {
+			withPath: "",
+			reqPath:  "socket.io",
+			expect:   `^(\d+\{.[^\}]*\})+$`,
+		},
+		"socket.io": {
+			withPath: "socket.io",
+			reqPath:  "socket.io",
+			expect:   `^(\d+\{.[^\}]*\})+$`,
+		},
+		"socket.io with left slash": {
+			withPath: "/socket.io",
+			reqPath:  "socket.io",
+			expect:   `^(\d+\{.[^\}]*\})+$`,
+		},
+		"socket.io with right slash": {
+			withPath: "socket.io/",
+			reqPath:  "socket.io",
+			expect:   `^(\d+\{.[^\}]*\})+$`,
+		},
+		"socket.io with both slash": {
+			withPath: "/socket.io/",
+			reqPath:  "socket.io",
+			expect:   `^(\d+\{.[^\}]*\})+$`,
+		},
+		"testing": {
+			withPath: "testing",
+			reqPath:  "testing",
+			expect:   `^(\d+\{.[^\}]*\})+$`,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/%s/?EIO=4&transport=polling", test.reqPath), nil)
+			rsp := httptest.NewRecorder()
+
+			svr := socketio.NewServerV4(socketio.WithPath(test.withPath))
+			svr.ServeHTTP(rsp, req)
+
+			assert.Regexp(t, test.expect, rsp.Body.String())
+		})
+	}
+}
 
 func TestServerV4(t *testing.T) {
 	var opts = []func(*testing.T){}
