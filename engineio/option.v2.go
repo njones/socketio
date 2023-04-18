@@ -8,18 +8,20 @@ import (
 	eiot "github.com/njones/socketio/engineio/transport"
 )
 
-func WithCodec(codec eiot.Codec) Option {
-	return func(o OptionWith) {
-		if v, ok := o.(*serverV2); ok {
-			v.codec = codec
+func init() {
+	withPath[1] = func(path string) Option {
+		return func(o OptionWith) {
+			if v, ok := o.(*serverV2); ok {
+				v.path = &path
+			}
 		}
 	}
 }
 
-func WithPath(path string) Option {
+func WithCodec(codec eiot.Codec) Option {
 	return func(o OptionWith) {
 		if v, ok := o.(*serverV2); ok {
-			v.path = &path
+			v.codec = codec
 		}
 	}
 }
