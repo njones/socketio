@@ -18,7 +18,7 @@ func storeDuration(addr *time.Duration, val time.Duration) {
 	atomic.StoreInt64((*int64)(addr), int64(val))
 }
 
-type mapSessions interface {
+type transportSessions interface {
 	Set(eiot.Transporter) error
 	Get(SessionID) (eiot.Transporter, error)
 

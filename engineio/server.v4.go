@@ -76,7 +76,7 @@ func (v4 *serverV4) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		sessionID = v4.generateID()
 		ctx = context.WithValue(ctx, ctxSessionID, sessionID)
 
-		transportName, _ := r.Context().Value(ctxTransportName).(TransportName)
+		transportName := transportNameFrom(r)
 		transport = v4.transports[transportName](sessionID, v4.codec)
 		if err := v4.sessions.Set(transport); err != nil {
 			return nil, err
@@ -98,28 +98,25 @@ func (v4 *serverV4) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		}
 	}
 
-	var isProbeOnInit bool
-	var fnOnUpgrade func() error
-	transport, _, fnOnUpgrade, err = v4.doUpgrade(v4.sessions.Get(sessionID))(w, r)
+	upgrade := v4.doUpgrade(v4.sessions.Get(sessionID))(w, r)
 	if err != nil {
 		return nil, err
 	}
 
 	var opts []eiot.Option
-	if isProbeOnInit {
-		opts = []eiot.Option{eiot.OnInitProbe(isProbeOnInit)}
-	}
-	if fnOnUpgrade != nil {
-		opts = []eiot.Option{eiot.OnUpgrade(fnOnUpgrade)}
+	if upgrade.upgradeFn != nil {
+		opts = []eiot.Option{eiot.OnUpgrade(upgrade.upgradeFn)}
 	}
 
 	ctx = v4.sessions.WithCancel(ctx)
 	ctx = v4.sessions.WithInterval(ctx, v4.pingInterval)
 	ctx = v4.sessions.WithTimeout(ctx, v4.pingTimeout)
 
-	go func() { v4.transportRunError <- transport.Run(w, r.WithContext(ctx), append(v4.eto, opts...)...) }()
+	go func() {
+		v4.transportRunError <- upgrade.transport.Run(w, r.WithContext(ctx), append(v4.eto, opts...)...)
+	}()
 
-	return
+	return upgrade.transport, err
 }
 
 func (v4 *serverV4) handshakePacket(sessionID SessionID, transportName TransportName) eiop.Packet {

@@ -27,6 +27,13 @@ const Version2 EIOVersionStr = "2"
 
 func init() { registry[Version2.Int()] = NewServerV2 }
 
+type upgradeable struct {
+	transport     eiot.Transporter
+	isProbeOnInit bool
+	upgradeFn     func() error
+	err           error
+}
+
 type serverV2 struct {
 	path *string
 
@@ -53,7 +60,7 @@ type serverV2 struct {
 	eto []eiot.Option
 
 	servers    map[EIOVersionStr]server
-	sessions   mapSessions
+	sessions   transportSessions
 	transports map[TransportName]func(SessionID, eiot.Codec) eiot.Transporter
 
 	transportRunError chan error
@@ -185,7 +192,8 @@ func (v2 *serverV2) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 	sessionID, _ := ctx.Value(ctxSessionID).(SessionID)
 	if sessionID == "" {
 		sessionID = v2.generateID()
-		transportName, _ := r.Context().Value(ctxTransportName).(TransportName)
+
+		transportName := transportNameFrom(r)
 		transport = v2.transports[transportName](sessionID, v2.codec)
 		if err := v2.sessions.Set(transport); err != nil {
 			return nil, err
@@ -208,28 +216,28 @@ func (v2 *serverV2) serveTransport(w http.ResponseWriter, r *http.Request) (tran
 		}
 	}
 
-	var isProbeOnInit bool
-	var fnOnUpgrade func() error
-	transport, isProbeOnInit, fnOnUpgrade, err = v2.doUpgrade(v2.sessions.Get(sessionID))(w, r)
-	if err != nil {
-		return nil, err
+	upgrade := v2.doUpgrade(v2.sessions.Get(sessionID))(w, r)
+	if upgrade.err != nil {
+		return nil, upgrade.err
 	}
 
 	var opts []eiot.Option
-	if isProbeOnInit {
-		opts = []eiot.Option{eiot.OnInitProbe(isProbeOnInit)}
+	if upgrade.isProbeOnInit {
+		opts = []eiot.Option{eiot.OnInitProbe(upgrade.isProbeOnInit)}
 	}
-	if fnOnUpgrade != nil {
-		opts = []eiot.Option{eiot.OnUpgrade(fnOnUpgrade)}
+	if upgrade.upgradeFn != nil {
+		opts = []eiot.Option{eiot.OnUpgrade(upgrade.upgradeFn)}
 	}
 
 	ctx = v2.sessions.WithTimeout(ctx, v2.pingTimeout*4)
 	ctx = v2.sessions.WithInterval(ctx, v2.pingTimeout)
 
 	opts = append(opts, eiot.WithNoPing())
-	go func() { v2.transportRunError <- transport.Run(w, r.WithContext(ctx), append(v2.eto, opts...)...) }()
+	go func() {
+		v2.transportRunError <- upgrade.transport.Run(w, r.WithContext(ctx), append(v2.eto, opts...)...)
+	}()
 
-	return
+	return upgrade.transport, nil
 }
 
 func (v2 *serverV2) handshakePacket(sessionID SessionID, transportName TransportName) eiop.Packet {
@@ -243,24 +251,26 @@ func (v2 *serverV2) handshakePacket(sessionID SessionID, transportName Transport
 	}
 }
 
-func (v2 *serverV2) doUpgrade(transport eiot.Transporter, err error) func(http.ResponseWriter, *http.Request) (eiot.Transporter, bool, func() error, error) {
-	var isUpgrade bool
-	return func(w http.ResponseWriter, r *http.Request) (eiot.Transporter, bool, func() error, error) {
+func (v2 *serverV2) doUpgrade(transport eiot.Transporter, err error) func(http.ResponseWriter, *http.Request) upgradeable {
+	return func(w http.ResponseWriter, r *http.Request) upgradeable {
 		if err != nil {
-			return transport, isUpgrade, nil, err
+			return upgradeable{transport: transport, err: err}
 		}
 		sessionID, from, to := transport.ID(), transport.Name(), transportNameFrom(r)
 		if to != from {
 			for _, val := range v2.upgrades(from, v2.transports) {
 				if string(to) == val {
-					transport = v2.transports[to](sessionID, v2.codec)
-					isUpgrade = true
-					return transport, isUpgrade, func() error { return v2.sessions.Set(transport) }, nil
+					return upgradeable{
+						transport:     v2.transports[to](sessionID, v2.codec),
+						isProbeOnInit: true,
+						upgradeFn:     func() error { return v2.sessions.Set(transport) },
+						err:           nil,
+					}
 				}
 			}
-			return nil, false, nil, ErrTransportUpgradeFailed
+			return upgradeable{err: ErrTransportUpgradeFailed}
 		}
-		return transport, isUpgrade, nil, err
+		return upgradeable{transport: transport, err: err}
 	}
 }
 
