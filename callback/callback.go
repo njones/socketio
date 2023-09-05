@@ -27,7 +27,7 @@ type FuncAnyAck func(...interface{}) []seri.Serializable
 func (fn FuncAnyAck) Callback(v ...interface{}) error { return ErrUnimplementedSerialize }
 func (fn FuncAnyAck) CallbackAck(v ...interface{}) []interface{} {
 	slice := fn(v...)
-	out := make([]interface{}, len(v))
+	out := make([]interface{}, len(slice))
 	for i, ice := range slice {
 		if x, ok := ice.(interface{ Interface() interface{} }); ok {
 			out[i] = x.Interface()
