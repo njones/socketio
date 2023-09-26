@@ -25,3 +25,5 @@ require (
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )
+
+replace github.com/njones/socketio v0.1.0 => github.com/kana-care/socketio v0.1.0
