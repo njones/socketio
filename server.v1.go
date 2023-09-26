@@ -9,6 +9,7 @@ import (
 
 	nmem "github.com/njones/socketio/adaptor/transport/memory"
 	eio "github.com/njones/socketio/engineio"
+	eiot "github.com/njones/socketio/engineio/transport"
 	erro "github.com/njones/socketio/internal/errors"
 	siop "github.com/njones/socketio/protocol"
 	siot "github.com/njones/socketio/transport"
@@ -138,6 +139,26 @@ func (v1 *ServerV1) serveHTTP(w http.ResponseWriter, r *http.Request) (err error
 	if err != nil {
 		return err
 	}
+
+	go func(e eiot.Transporter) {
+		for {
+			sessionId, ok := <-e.ReceiveTimeout()
+			if ok {
+				socketId := v1.transport.GetSocketID(sessionId)
+				if socketId != nil && !v1.tr().IsDisconnected(*socketId) {
+					for namespaceId, namespaces := range v1.events {
+						if events, ok := namespaces[OnDisconnectEvent]; ok {
+							if fn, ok := events[*socketId]; ok {
+								v1.tr().Leave(namespaceId, *socketId, socketIDPrefix+socketId.String())
+								fn.Callback("client namespace disconnect.")
+							}
+						}
+					}
+				}
+				return
+			}
+		}
+	}(eioTransport)
 
 	sid, err := v1.transport.Add(eioTransport)
 	if err != nil {

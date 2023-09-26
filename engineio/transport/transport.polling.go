@@ -38,6 +38,7 @@ func NewPollingTransport(chanBuf int) func(SessionID, Codec) Transporter {
 				send:     make(chan eiop.Packet, chanBuf),
 				receive:  make(chan eiop.Packet, chanBuf),
 				sendPing: true,
+				expireId: make(chan eios.ID),
 			},
 			compress: func(fn handlerWithError) handlerWithError {
 				return func(w http.ResponseWriter, r *http.Request) error {
