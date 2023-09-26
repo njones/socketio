@@ -15,6 +15,10 @@ type Transporter interface {
 	SendReceiver
 
 	AckID() uint64
+
+	GetSocketID(eiot.SessionID) *SocketID
+	Disconnect(SocketID)
+	IsDisconnected(SocketID) bool
 }
 
 type Sender interface {

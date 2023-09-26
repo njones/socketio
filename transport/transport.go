@@ -60,9 +60,10 @@ type Transport struct {
 
 	*buffer
 
-	receive      chan Socket
-	newPacket    siop.NewPacket
-	eioTransport eiot.Transporter
+	receive        chan Socket
+	newPacket      siop.NewPacket
+	eioTransport   eiot.Transporter
+	isDisconnected bool
 }
 
 func NewTransport(id SocketID, eioTransport eiot.Transporter, fn siop.NewPacket) *Transport {
@@ -73,6 +74,14 @@ func NewTransport(id SocketID, eioTransport eiot.Transporter, fn siop.NewPacket)
 		newPacket:    fn,
 		eioTransport: eioTransport,
 	}
+}
+
+func (t *Transport) Disconnect() {
+	t.isDisconnected = true
+}
+
+func (t *Transport) IsDisconnected() bool {
+	return t.isDisconnected
 }
 
 func (t *Transport) SendBuffer() {

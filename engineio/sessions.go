@@ -44,6 +44,9 @@ func NewSessions() *sessions {
 		shave:  10 * time.Millisecond,
 		removeTransport: func(sessionID SessionID) {
 			tr.ʘ.Lock()
+			if t, ok := tr.s[sessionID]; ok {
+				t.SendTimeout()
+			}
 			delete(tr.s, sessionID)
 			tr.ʘ.Unlock()
 		},

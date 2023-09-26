@@ -76,6 +76,21 @@ func (tr *inMemoryTransport) Transport(socketID SocketID) *siot.Transport {
 	return tr.s[socketID]
 }
 
+func (tr *inMemoryTransport) GetSocketID(sessionId eiot.SessionID) *SocketID {
+	if socketId, ok := tr.m[sessionId]; ok {
+		return &socketId
+	}
+	return nil
+}
+
+func (tr *inMemoryTransport) Disconnect(socketID SocketID) {
+	tr.s[socketID].Disconnect()
+}
+
+func (tr *inMemoryTransport) IsDisconnected(socketID SocketID) bool {
+	return tr.s[socketID].IsDisconnected()
+}
+
 // Add creates a new socket id based on adding the EngineIO transport
 // to the internal map. It returns the new socket id and any errors.
 func (tr *inMemoryTransport) Add(et eiot.Transporter) (SocketID, error) {

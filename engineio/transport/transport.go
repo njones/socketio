@@ -31,6 +31,8 @@ type Transporter interface {
 	Name() Name
 	Send(eiop.Packet)
 	Receive() <-chan eiop.Packet
+	SendTimeout()
+	ReceiveTimeout() <-chan SessionID
 
 	Run(http.ResponseWriter, *http.Request, ...Option) error
 
@@ -49,6 +51,7 @@ type Transport struct {
 	sendPing bool
 
 	send, receive chan eiop.Packet
+	expireId      chan SessionID
 
 	shutdown func()
 }
@@ -63,3 +66,6 @@ func (t *Transport) Shutdown() {
 		t.shutdown()
 	}
 }
+
+func (t *Transport) SendTimeout()                     { t.expireId <- t.id }
+func (t *Transport) ReceiveTimeout() <-chan SessionID { return t.expireId }

@@ -101,11 +101,13 @@ func doDisconnectPacket(v1 *ServerV1) func(SocketID, siot.Socket, *Request) erro
 	return func(socketID SocketID, socket siot.Socket, req *Request) (err error) {
 		if fn, ok := v1.events[socket.Namespace][OnDisconnectEvent][socketID]; ok {
 			v1.tr().Leave(socket.Namespace, socketID, socketIDPrefix+socketID.String())
+			v1.tr().Disconnect(socketID)
 			return fn.Callback("client namespace disconnect")
 		}
 		// for any socket id at the io. (server) level...
 		if fn, ok := v1.events[socket.Namespace][OnDisconnectEvent][serverEvent]; ok {
 			v1.tr().Leave(socket.Namespace, socketID, socketIDPrefix+socketID.String())
+			v1.tr().Disconnect(socketID)
 			return fn.Callback("client namespace disconnect")
 		}
 		return ErrOnDisconnectSocket

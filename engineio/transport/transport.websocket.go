@@ -42,11 +42,12 @@ func NewWebsocketTransport(chanBuf int) func(SessionID, Codec) Transporter {
 		{
 			t := &WebsocketTransport{
 				Transport: &Transport{
-					id:      id,
-					name:    Websocket,
-					codec:   codec,
-					send:    make(chan eiop.Packet, chanBuf),
-					receive: make(chan eiop.Packet, chanBuf),
+					id:       id,
+					name:     Websocket,
+					codec:    codec,
+					send:     make(chan eiop.Packet, chanBuf),
+					receive:  make(chan eiop.Packet, chanBuf),
+					expireId: make(chan eios.ID),
 				},
 				origin:  []string{"*"},
 				PingMsg: defaultPingMsg,
